@@ -151,16 +151,20 @@ pub mod z2d {
 
 #[cfg(test)]
 mod tests {
+	use crate::z2d::ZArray2D;
+	use rand::{rngs::StdRng, Rng, SeedableRng};
 
+	fn seed_arrays_u8(w: usize, h: usize) -> (Vec<Vec<u8>>, ZArray2D<u8>){
+		let ref_map: Vec<Vec<u8>> = vec![vec![0u8;w];h];
+		let map = ZArray2D::new(w, h, 0u8);
+		return (ref_map, map);
+	}
 	#[test]
 	fn test_zarray2dmap_get_set(){
-		use crate::z2d::ZArray2D;
-		use rand::{rngs::StdRng, Rng, SeedableRng};
-		let mut prng = StdRng::seed_from_u64(20220331u64);
 		let h: usize = 601;
 		let w: usize = 809;
-		let mut ref_map: Vec<Vec<u8>> = vec![vec![0u8;w];h];
-		let mut map = ZArray2D::new(w, h, 0u8);
+		let (mut ref_map, mut map) = seed_arrays_u8(w, h);
+		let mut prng = StdRng::seed_from_u64(20220331u64);
 		// set values
 		for y in 0..h {
 			for x in 0..w {
@@ -178,13 +182,10 @@ mod tests {
 	}
 	#[test]
 	fn test_zarray2dmap_power_of_8(){
-		use crate::z2d::ZArray2D;
-		use rand::{rngs::StdRng, Rng, SeedableRng};
-		let mut prng = StdRng::seed_from_u64(20220331u64);
 		let h: usize = 64;
 		let w: usize = 64;
-		let mut ref_map: Vec<Vec<u8>> = vec![vec![0u8;w];h];
-		let mut map = ZArray2D::new(w, h, 0u8);
+		let (mut ref_map, mut map) = seed_arrays_u8(w, h);
+		let mut prng = StdRng::seed_from_u64(20220331u64);
 		// set values
 		for y in 0..h {
 			for x in 0..w {
@@ -203,13 +204,10 @@ mod tests {
 
 	#[test]
 	fn test_zarray2dmap_small(){
-		use crate::z2d::ZArray2D;
-		use rand::{rngs::StdRng, Rng, SeedableRng};
-		let mut prng = StdRng::seed_from_u64(20220331u64);
 		let h: usize = 3;
 		let w: usize = 5;
-		let mut ref_map: Vec<Vec<u8>> = vec![vec![0u8;w];h];
-		let mut map = ZArray2D::new(w, h, 0u8);
+		let (mut ref_map, mut map) = seed_arrays_u8(w, h);
+		let mut prng = StdRng::seed_from_u64(20220331u64);
 		// set values
 		for y in 0..h {
 			for x in 0..w {
@@ -227,32 +225,32 @@ mod tests {
 	}
 
 	#[test]
-	fn test_zarray2dmap_performance(){
-		use crate::z2d::ZArray2D;
-		use rand::{rngs::StdRng, Rng, SeedableRng};
+	fn test_zarray2dmap_performance_neighbors(){
 		use std::time::{Duration, Instant};
-		let mut prng = StdRng::seed_from_u64(20220331u64);
 		let h: usize = 100;
 		let w: usize = 100;
-		let mut ref_map: Vec<Vec<u8>> = vec![vec![0u8;w];h];
-		let mut map = ZArray2D::new(w, h, 0u8);
+		let (mut ref_map, mut map) = seed_arrays_u8(w, h);
+		let mut prng = StdRng::seed_from_u64(20220331u64);
 		// set values
 		for y in 0..h {
 			for x in 0..w {
 				let v: u8 = prng.gen();
 				ref_map[y][x] = v;
-				map.set(x, y, v);
+				map.set(x, y, v).unwrap();
 			}
 		}
 		// sum neighbors values with benchmark reference (vecs)
 		let mut ref_map_sums: Vec<Vec<u16>> = vec![vec![0u16;w];h];
-		let radius: usize = 3;
+		let radius: usize = 2;
+		let rad_plus = radius * 2 + 1;
 		let t0 = Instant::now();
 		for y in radius..h-radius {
 			for x in radius..w-radius {
 				let mut sum = 0;
-				for dy in -radius..radius+1 as i32 {
-					for dx in -radius..radius+1 as i32 {
+				for ry in 0..rad_plus as i32 {
+					let dy = ry - radius as i32;
+					for rx in 0..rad_plus as i32 {
+						let dx = rx - radius as i32;
 						sum += ref_map[(y as i32+dy) as usize][(x as i32+dx) as usize] as u16;
 					}
 				}
@@ -269,8 +267,10 @@ mod tests {
 		for y in radius..h-radius {
 			for x in radius..w-radius {
 				let mut sum = 0;
-				for dy in -radius..radius+1 as i32 {
-					for dx in -radius..radius+1 as i32 {
+				for ry in 0..rad_plus as i32 {
+					let dy = ry - radius as i32;
+					for rx in 0..rad_plus as i32 {
+						let dx = rx - radius as i32;
 						sum += *map.get((x as i32+dx) as usize, (y as i32+dy) as usize).unwrap() as u16;
 					}
 				}
@@ -280,7 +280,7 @@ mod tests {
 		let t1 = Instant::now();
 		let my_time = (t1-t0).as_secs_f64()*1e6;
 		println!("ZArray2D {}x{} sum of neighbors performance: {} micros", w, h, my_time);
-		println!("Performance improved by {}%", (100. * (ref_time / my_time)) as i32);
+		println!("Performance improved by {}%", (100. * (ref_time / my_time - 1.)) as i32);
 	}
 
 /*
