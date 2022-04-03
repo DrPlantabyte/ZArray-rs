@@ -1,7 +1,14 @@
 [package]
 name = "zarray"
-version = "0.0.1"
+version = "1.0.1"
 edition = "2021"
+authors = ["Christopher Collin Hall"]
+description = """Cache-optimized 2D and 3D arrays using Morton order (aka
+Z-order) Z-indexed storage, with a convenient API for common 2D and 3D access
+ patterns. Use of zarray in place of a Vec of Vecs often improves performance,
+ especially for algorithms such as blurring and cellular automata."""
+license = "MIT"
+
 
 [dependencies]
 # none
