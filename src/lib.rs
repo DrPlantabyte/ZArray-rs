@@ -88,7 +88,6 @@ pub mod z2d {
 			for _ in 0..patch_count{
 				p.push(Patch{contents: [default_val; 64]});
 			}
-			println!("width: {}, height: {}, pwidth: {}, patch count: {}", width, height, pwidth, p.len());
 			return ZArray2D {width, height, pwidth, patches: p, _phantomdata: PhantomData};
 		}
 
@@ -174,7 +173,150 @@ pub mod z2d {
 		return ((zorder_8bit_to_16bit((x & 0xFF) as u8, (y & 0xFF) as u8) as u32) << 16) | zorder_8bit_to_16bit((x >> 8) as u8, (y >> 8) as u8) as u32
 	}
 
+}
 
+pub mod z3d {
+	// Z-order indexing in 2 dimensions
+
+	use std::marker::PhantomData;
+	use crate::LookUpError;
+
+
+	struct Patch<T>{
+		contents: [T;512]
+	}
+
+	impl<T> Patch<T> {
+		fn get(&self, x: usize, y:usize, z:usize) -> &T {
+			// 3-bit x 3-bit x 3-bit
+			return &self.contents[zorder_4bit_to_12bit(
+				x as u8 & 0x07, y as u8 & 0x07, z as u8 & 0x07) as usize];
+		}
+		fn set(&mut self, x: usize, y:usize, z:usize, new_val: T) {
+			// 3-bit x 3-bit
+			let i = zorder_4bit_to_12bit(
+				x as u8 & 0x07, y as u8 & 0x07, z as u8 & 0x07) as usize;
+			self.contents[i] = new_val;
+		}
+	}
+
+	fn patch_index(x: usize, y:usize, z:usize, pxsize: usize, pysize: usize) -> usize{
+		return (x >> 3) + pxsize * ((y >> 3) + (pysize * (z >> 3)));
+	}
+
+	pub struct ZArray3D<T> {
+		// for heap allocated data
+		xsize: usize,
+		ysize: usize,
+		zsize: usize,
+		pxsize: usize,
+		pysize: usize,
+		patches: Vec<Patch<T>>,
+		_phantomdata: PhantomData<T>,
+	}
+
+	impl<T> ZArray3D<T> where T: Copy {
+		pub fn new(xsize: usize, ysize: usize, zsize: usize, default_val: T) -> ZArray3D<T>{
+			let px = (xsize >> 3) + 1;
+			let py = (ysize >> 3) + 1;
+			let pz = (zsize >> 3) + 1;
+			let patch_count = px * py * pz;
+			let mut p = Vec::with_capacity(patch_count);
+			for _ in 0..patch_count{
+				p.push(Patch{contents: [default_val; 512]});
+			}
+			return ZArray3D { xsize, ysize, zsize, pxsize: px, pysize: py,
+				patches: p, _phantomdata: PhantomData};
+		}
+
+
+		pub fn get(&self, x: usize, y: usize, z: usize) -> Result<&T,LookUpError>{
+			if x < self.xsize && y < self.ysize && z < self.zsize {
+				Ok(self.patches[patch_index(x, y, z, self.pxsize, self.pysize)].get(x, y, z))
+			} else {
+				Err(LookUpError{coord: vec![x, y, z],
+					bounds: vec![self.xsize, self.ysize, self.zsize]})
+			}
+		}
+
+		pub fn set(&mut self, x: usize, y: usize, z: usize, new_val: T) -> Result<(),LookUpError>{
+			if x < self.xsize && y < self.ysize && z < self.zsize {
+				Ok(self.patches[patch_index(x, y, z, self.pxsize, self.pysize)]
+					.set(x, y, z, new_val))
+			} else {
+				Err(LookUpError{coord: vec![x, y, z],
+					bounds: vec![self.xsize, self.ysize, self.zsize]})
+			}
+		}
+
+		pub fn wrapped_get(&self, x: isize, y: isize, z: isize) -> &T{
+			let x = (self.xsize as isize + (x % self.xsize as isize)) as usize % self.xsize;
+			let y = (self.ysize as isize + (y % self.ysize as isize)) as usize % self.ysize;
+			let z = (self.zsize as isize + (z % self.zsize as isize)) as usize % self.zsize;
+			return &self.patches[patch_index(x, y, z, self.pxsize, self.pysize)].get(x, y, z);
+		}
+
+		pub fn wrapped_set(&mut self, x: isize, y: isize, z: isize, new_val: T) {
+			let x = (self.xsize as isize + (x % self.xsize as isize)) as usize % self.xsize;
+			let y = (self.ysize as isize + (y % self.ysize as isize)) as usize % self.ysize;
+			let z = (self.zsize as isize + (z % self.zsize as isize)) as usize % self.zsize;
+			self.patches[patch_index(x, y, z, self.pxsize, self.pysize)].set(x, y, z, new_val);
+		}
+
+		pub fn bounded_get(&self, x: isize, y: isize, z: isize) -> Option<&T>{
+			if x >= 0 && y >= 0 && z >= 0
+				&& x < self.xsize as isize && y < self.ysize as isize && z < self.zsize as isize {
+				return Some(&self.patches[
+					patch_index(x as usize, y as usize, z as usize, self.pxsize, self.pysize)]
+					.get(x as usize, y as usize, z as usize));
+			} else {
+				return None;
+			}
+		}
+
+		pub fn bounded_set(&mut self, x: isize, y: isize, z: isize, new_val: T) {
+			if x >= 0 && y >= 0 && z >= 0
+				&& x < self.xsize as isize && y < self.ysize as isize && z < self.zsize as isize {
+				self.patches[
+					patch_index(x as usize, y as usize, z as usize, self.pxsize, self.pysize)]
+					.set(x as usize, y as usize, z as usize, new_val);
+			} else {
+				// no-op
+			}
+		}
+	}
+
+
+	static ZLUT: [u16; 16] = [
+		0b0000000000000000,
+		0b0000000000000001,
+		0b0000000000001000,
+		0b0000000000001001,
+		0b0000000001000000,
+		0b0000000001000001,
+		0b0000000001001000,
+		0b0000000001001001,
+		0b0000001000000000,
+		0b0000001000000001,
+		0b0000001000001000,
+		0b0000001000001001,
+		0b0000001001000000,
+		0b0000001001000001,
+		0b0000001001001000,
+		0b0000001001001001
+	];
+
+	pub fn zorder_4bit_to_12bit(x: u8, y: u8, z: u8) -> u16 {
+		let x_bits = ZLUT[(x & 0x0F) as usize];
+		let y_bits = ZLUT[(y & 0x0F) as usize] << 1;
+		let z_bits = ZLUT[(z & 0x0F) as usize] << 2;
+		return z_bits | y_bits | x_bits;
+	}
+
+	pub fn zorder_8bit_to_24bit(x:u8, y:u8, z: u8) -> u32 {
+		return ((zorder_4bit_to_12bit(x >> 4, y >> 4, z >> 4) as u32) << 12)
+			| zorder_4bit_to_12bit(x, y, z) as u32
+	}
 
 }
 
@@ -182,30 +324,16 @@ pub mod z2d {
 #[cfg(test)]
 mod tests {
 	use crate::z2d::ZArray2D;
+	use crate::z3d::ZArray3D;
 	use rand::{rngs::StdRng, Rng, SeedableRng};
 
-	/*
-	#[test]
-	fn test_test(){
-		use std::collections::BTreeMap;
-		use std::string::String;
-		let mut m: BTreeMap<i32, String> = BTreeMap::new();
-		m.insert(2, "two".to_string());
-		m.insert(1, "one".to_string());
-		m.insert(3, "three".to_string());
-		m.insert(100, "hundred".to_string());
-		m.insert(-100, "minus hundred".to_string());
-		for e in m {
-			println!("<{}, {}>", e.0, e.1);
-		}
-	}
-	*/
 
 	fn seed_arrays_u8(w: usize, h: usize) -> (Vec<Vec<u8>>, ZArray2D<u8>){
 		let ref_map: Vec<Vec<u8>> = vec![vec![0u8;w];h];
 		let map = ZArray2D::new(w, h, 0u8);
 		return (ref_map, map);
 	}
+
 	#[test]
 	fn test_zarray2dmap_get_set(){
 		let h: usize = 601;
@@ -365,7 +493,8 @@ mod tests {
 		}
 		let t1 = Instant::now();
 		let ref_time =  (t1-t0).as_secs_f64()*1e6;
-		println!("Vec<Vec<u16>> {}x{} sum of neighbors in radius {} performance: {} micros", w, h, radius, ref_time);
+		println!("Vec<Vec<u16>> {}x{} sum of neighbors in radius {} performance: {} micros", w, h,
+				 radius, ref_time as i32);
 
 		// sum neighbors values with ZArray
 		let mut map_sums = ZArray2D::new(w, h, 0u16);
@@ -386,7 +515,7 @@ mod tests {
 		let t1 = Instant::now();
 		let my_time = (t1-t0).as_secs_f64()*1e6;
 		println!("ZArray2D {}x{} sum of neighbors in radius {} performance: {} micros", w, h,
-			radius, my_time);
+			radius, my_time as i32);
 		println!("Performance improved by {}%", (100. * (ref_time / my_time - 1.)) as i32);
 	}
 
@@ -451,24 +580,26 @@ mod tests {
 
 	}
 
-/*
+	fn seed_3darrays_u8(w: usize, h: usize, d: usize) -> (Vec<Vec<Vec<u8>>>, ZArray3D<u8>){
+		let ref_map: Vec<Vec<Vec<u8>>> = vec![vec![vec![0u8;w];h];d];
+		let map = ZArray3D::new(w, h, d, 0u8);
+		return (ref_map, map);
+	}
+
 	#[test]
 	fn test_zarray3dmap_get_set(){
-		use crate::z3d::ZArray3D;
-		use rand::{rngs::StdRng, Rng, SeedableRng};
+		let h: usize = 11;
+		let w: usize = 39;
+		let d: usize = 23;
+		let (mut ref_map, mut map) = seed_3darrays_u8(w, h, d);
 		let mut prng = StdRng::seed_from_u64(20220331u64);
-		let h: usize = 29;
-		let w: usize = 57;
-		let d: usize = 13;
-		let mut ref_map: Vec<Vec<Vec<u8>>> = vec![vec![vec![0u8;w];h];d];
-		let mut map = ZArray3D::new(w, h, d, 0u8);
 		// set values
 		for z in 0..d {
 			for y in 0..h {
 				for x in 0..w {
 					let v: u8 = prng.gen();
 					ref_map[z][y][x] = v;
-					map.set(x, y, z, v);
+					map.set(x, y, z, v).unwrap();
 				}
 			}
 		}
@@ -483,22 +614,93 @@ mod tests {
 	}
 
 	#[test]
-	fn test_zarray3dmap_power_of_8(){
-		use crate::z3d::ZArray3D;
-		use rand::{rngs::StdRng, Rng, SeedableRng};
+	fn test_zarray3dmap_wrapped_get_set(){
+		let h: usize = 20;
+		let w: usize = 20;
+		let d: usize = 20;
+		let (mut ref_map, mut map) = seed_3darrays_u8(w, h, d);
 		let mut prng = StdRng::seed_from_u64(20220331u64);
-		let h: usize = 64;
-		let w: usize = 64;
-		let d: usize = 64;
-		let mut ref_map: Vec<Vec<Vec<u8>>> = vec![vec![vec![0u8;w];h];d];
-		let mut map = ZArray3D::new(w, h, d, 0u8);
+		// set values
+		for z in -10..10 as isize {
+			for y in -10..10 as isize {
+				for x in -10..10 as isize {
+					let v: u8 = prng.gen();
+					ref_map[((20 + z % 20) % 20) as usize][((20 + y % 20) % 20) as usize][((20 + x % 20) % 20) as usize]
+						= v;
+					map.wrapped_set(x, y, z, v);
+				}
+			}
+		}
+		let m: isize = 101;
+		let v: u8 = prng.gen();
+		ref_map[((20+(m/2)%20)%20) as usize][((20+m%20)%20) as usize]
+			[((20+(3*m)%20)%20) as usize] = v;
+		map.wrapped_set(3*m, m, m/2, v);
+		// get values
+		for z in 0..d {
+			for y in 0..h {
+				for x in 0..w {
+					assert_eq!(ref_map[z][y][x], *map.get(x, y, z).unwrap());
+				}
+			}
+		}
+	}
+
+
+	#[test]
+	fn test_zarray3dmap_bounded_get_set(){
+		let h: usize = 20;
+		let w: usize = 20;
+		let d: usize = 20;
+		let (mut ref_map, mut map) = seed_3darrays_u8(w, h, d);
+		let mut prng = StdRng::seed_from_u64(20220331u64);
+		// set values
+		for z in -10..10 as isize {
+			for y in -10..10 as isize {
+				for x in -10..10 as isize {
+					let v: u8 = prng.gen();
+					if x >= 0 && x < w as isize && y >= 0 && y < h as isize
+						&& z >= 0 && z < d as isize{
+						ref_map[z as usize][y as usize][x as usize] = v;
+					}
+					map.bounded_set(x, y, z, v);
+				}
+			}
+		}
+		let oob: u8 = 127;
+		let m: isize = 101;
+		let v: u8 = prng.gen();
+		map.bounded_set(3*m, m, m/2, v); // should be a no-op
+		// get values
+		for z in 0..d {
+			for y in 0..h {
+				for x in 0..w {
+					assert_eq!(ref_map[z][y][x],
+							   *map.bounded_get(x as isize, y as isize, z as isize)
+								   .unwrap_or(&oob));
+				}
+			}
+		}
+		assert_eq!(oob, *map.bounded_get(-1, 0, 0).unwrap_or(&oob));
+		assert_eq!(oob, *map.bounded_get(0,  -1, 0).unwrap_or(&oob));
+		assert_eq!(oob, *map.bounded_get(0,  0, -1).unwrap_or(&oob));
+		assert_eq!(oob, *map.bounded_get(w as isize,  h as isize, d as isize).unwrap_or(&oob));
+	}
+
+	#[test]
+	fn test_zarray3dmap_power_of_8(){
+		let h: usize = 8;
+		let w: usize = 8;
+		let d: usize = 8;
+		let (mut ref_map, mut map) = seed_3darrays_u8(w, h, d);
+		let mut prng = StdRng::seed_from_u64(20220331u64);
 		// set values
 		for z in 0..d {
 			for y in 0..h {
 				for x in 0..w {
 					let v: u8 = prng.gen();
 					ref_map[z][y][x] = v;
-					map.set(x, y, z, v);
+					map.set(x, y, z, v).unwrap();
 				}
 			}
 		}
@@ -514,21 +716,18 @@ mod tests {
 
 	#[test]
 	fn test_zarray3dmap_small(){
-		use crate::z3d::ZArray3D;
-		use rand::{rngs::StdRng, Rng, SeedableRng};
-		let mut prng = StdRng::seed_from_u64(20220331u64);
 		let h: usize = 3;
 		let w: usize = 2;
-		let d: usize = 3;
-		let mut ref_map: Vec<Vec<Vec<u8>>> = vec![vec![vec![0u8;w];h];d];
-		let mut map = ZArray3D::new(w, h, d, 0u8);
+		let d: usize = 2;
+		let (mut ref_map, mut map) = seed_3darrays_u8(w, h, d);
+		let mut prng = StdRng::seed_from_u64(20220331u64);
 		// set values
 		for z in 0..d {
 			for y in 0..h {
 				for x in 0..w {
 					let v: u8 = prng.gen();
 					ref_map[z][y][x] = v;
-					map.set(x, y, z, v);
+					map.set(x, y, z, v).unwrap();
 				}
 			}
 		}
@@ -541,5 +740,80 @@ mod tests {
 			}
 		}
 	}
- */
+
+	#[test]
+	fn test_zarray3dmap_performance_neighborsum(){
+		use std::time::Instant;
+		let h: usize = 20;
+		let w: usize = 10;
+		let d: usize = 30;
+		let (mut ref_map, mut map) = seed_3darrays_u8(w, h, d);
+		let mut prng = StdRng::seed_from_u64(20220331u64);
+		// set values
+		for z in 0..d {
+			for y in 0..h {
+				for x in 0..w {
+					let v: u8 = prng.gen();
+					ref_map[z][y][x] = v;
+					map.set(x, y, z, v).unwrap();
+				}
+			}
+		}
+		// sum neighbors values with benchmark reference (vecs)
+		let mut ref_map_sums: Vec<Vec<Vec<u32>>> = vec![vec![vec![0u32;w];h];d];
+		let radius: usize = 2;
+		let rad_plus = radius * 2 + 1;
+		let t0 = Instant::now();
+		for z in radius..d - radius {
+			for y in radius..h - radius {
+				for x in radius..w - radius {
+					let mut sum = 0;
+					for rz in 0..rad_plus as i32 {
+						let dz = rz - radius as i32;
+						for ry in 0..rad_plus as i32 {
+							let dy = ry - radius as i32;
+							for rx in 0..rad_plus as i32 {
+								let dx = rx - radius as i32;
+								sum += ref_map[(z as i32 + dz) as usize][(y as i32 + dy) as usize]
+									[(x as i32 + dx) as usize] as u32;
+							}
+						}
+					}
+					ref_map_sums[z][y][x] = sum;
+				}
+			}
+		}
+		let t1 = Instant::now();
+		let ref_time =  (t1-t0).as_secs_f64()*1e6;
+		println!("Vec<Vec<u16>> {}x{}x{} sum of neighbors in radius {} performance: {} micros",
+			w, h, d, radius, ref_time as i32);
+
+		// sum neighbors values with ZArray
+		let mut map_sums = ZArray3D::new(w, h, d, 0u32);
+		let t0 = Instant::now();
+		for z in radius..d - radius {
+			for y in radius..h - radius {
+				for x in radius..w - radius {
+					let mut sum = 0;
+					for rz in 0..rad_plus as i32 {
+						let dz = rz - radius as i32;
+						for ry in 0..rad_plus as i32 {
+							let dy = ry - radius as i32;
+							for rx in 0..rad_plus as i32 {
+								let dx = rx - radius as i32;
+								sum += *map.get((x as i32+dx) as usize, (y as i32+dy) as usize,
+								(z as i32+dz) as usize).unwrap() as u32;
+							}
+						}
+					}
+					map_sums.set(x, y, z, sum).unwrap();
+				}
+			}
+		}
+		let t1 = Instant::now();
+		let my_time = (t1-t0).as_secs_f64()*1e6;
+		println!("ZArray2D {}x{}x{} sum of neighbors in radius {} performance: {} micros", w, h, d,
+				 radius, my_time as i32);
+		println!("Performance improved by {}%", (100. * (ref_time / my_time - 1.)) as i32);
+	}
 }
