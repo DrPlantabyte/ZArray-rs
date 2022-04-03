@@ -1,6 +1,9 @@
 use std::error::Error;
 use std::fmt::{Debug, Display, Formatter};
 
+/// This struct is an error type that is returned when attempting to get a value that is outside
+/// the range of the data. It implements the Debug and Display traits so that it can be easily
+/// printed as an error message.
 pub struct LookUpError{
 	coord: Vec<usize>,
 	bounds: Vec<usize>,
@@ -25,7 +28,7 @@ impl Error for LookUpError{}
 impl LookUpError {
 
 }
-
+/// Utility function for converting Vecs to Strings for the purpose of error reporting and debugging
 fn vec_to_string(v: &Vec<usize>) -> String{
 	let mut sb = String::from("(");
 	let mut not_first = false;
@@ -40,23 +43,70 @@ fn vec_to_string(v: &Vec<usize>) -> String{
 	sb += &String::from(")");
 	return sb;
 }
-
+/// This module is used for storing 2-dimensional data arrays, and internally uses Z-index arrays
+/// to improve data localization and alignment to the CPU cache-line fetches. In other words, use
+/// this to improve performance for 2D data that is randomly accessed rather than raster scanned
+/// or if your data processing makes heavy use of neighbor look-up in both the X and Y directions.
+/// # How It Works
+/// When you initialize a zarray::z2d::ZArray2D struct, it creates an array of 8x8 data patches,
+/// using Z-curve indexing within that patch. When you call a getter or setter method, it finds the
+/// corresponding data patch and then looks up (or sets) the data from within the patch. Since the
+/// cache-line size on most CPUs is 64 bytes (and up to only 128 bytes on more exotic chips), the
+/// 8x8 patch is sufficient localization for the majority of applications.
+/// # Example Usage
+/// An example of a simple blurring operation
+/// ```
+/// use zarray::z2d::ZArray2D;
+/// let w = 800;
+/// let h = 600;
+/// let mut input = ZArray2D::new(w, h, 0i32);
+/// let mut blurred = ZArray2D::new(w, h, 0i32);
+/// for y in 0..h {
+///   for x in 0..w {
+///     let random_number = (((x*1009+1031)*y*1013+1051) % 10) as i32;
+///     input.set(x, y, random_number).unwrap();
+///   }
+/// }
+/// let radius: i32 = 2;
+/// for y in radius..h as i32-radius {
+///   for x in radius..w as i32-radius {
+///     let mut sum = 0;
+///     for dy in -radius..radius+1 {
+///       for dx in -radius..radius+1 {
+///         sum += *input.bounded_get((x+dx) as isize, (y+dy) as isize).unwrap_or(&0);
+///       }
+///     }
+///     blurred.set(x as usize, y as usize, sum/((2*radius+1).pow(2))).unwrap();
+///   }
+/// }
+/// ```
 pub mod z2d {
 	// Z-order indexing in 2 dimensions
 
 	use std::marker::PhantomData;
 	use crate::LookUpError;
 
-
+	/// Private struct for holding an 8x8 data patch
 	struct Patch<T>{
 		contents: [T;64]
 	}
 
 	impl<T> Patch<T> {
+		/// data patch getter
+		/// # Parameters
+		/// * **x** - x coord (only lowest 3 bits are used, rest of bits are ignored)
+		/// * **y** - y coord (only lowest 3 bits are used, rest of bits are ignored)
+		/// # Returns
+		/// Returns a reference to the value stored in the patch at location (x & 0x07), (y & 0x07)
 		fn get(&self, x: usize, y:usize) -> &T {
 			// 3-bit x 3-bit
 			return &self.contents[zorder_4bit_to_8bit(x as u8 & 0x07, y as u8 & 0x07) as usize];
 		}
+		/// data patch setter
+		/// # Parameters
+		/// * **x** - x coord (only lowest 3 bits are used, rest of bits are ignored)
+		/// * **y** - y coord (only lowest 3 bits are used, rest of bits are ignored)
+		/// * **new_val** - value to set
 		fn set(&mut self, x: usize, y:usize, new_val: T) {
 			// 3-bit x 3-bit
 			let i = zorder_4bit_to_8bit(x as u8 & 0x07, y as u8 & 0x07) as usize;
@@ -66,10 +116,13 @@ pub mod z2d {
 		}
 	}
 
+	/// function for converting coordinate to index of data patch in the array of patches
 	fn patch_index(x: usize, y:usize, pwidth: usize) -> usize{
 		return (x >> 3) + ((y >> 3) * (pwidth));
 	}
 
+	/// This is primary struct for z-indexed 2D arrays. Create new instances with
+	/// ZArray2D::new(x_size, y_size, initial_value)
 	pub struct ZArray2D<T> {
 		// for heap allocated data
 		width: usize,
@@ -80,6 +133,14 @@ pub mod z2d {
 	}
 
 	impl<T> ZArray2D<T> where T: Copy {
+		/// Create a Z-index 2D array of values, initially filled with the provided default value
+		/// # Parameters
+		/// * **width** - size of this 2D array in the X dimension
+		/// * **height** - size of this 2D array in the Y dimension
+		/// * **default_val** - initial fill value (if a struct type, then it must implement the
+		/// Copy trait)
+		/// # Returns
+		/// Returns an initialized *ZArray2D* struct filled with *default_val*
 		pub fn new(width: usize, height: usize, default_val: T) -> ZArray2D<T>{
 			let pwidth = (width >> 3) + 1;
 			let pheight = (height >> 3) + 1;
@@ -91,7 +152,17 @@ pub mod z2d {
 			return ZArray2D {width, height, pwidth, patches: p, _phantomdata: PhantomData};
 		}
 
-
+		/// Gets a value from the 2D array, or returns a *LookUpError* if the provided coordinate
+		/// is out of bounds. If you are using a default value for out-of-bounds coordinates,
+		/// then you should use the *bounded_get(x, y)* method instead. If you want access to
+		/// wrap-around (eg (-2, 0) equivalent to (width-2,0)), then use the *wrapped_get(x, y)*
+		/// method.
+		/// # Parameters
+		/// * **x** - x dimension coordinate
+		/// * **y** - y dimension coordinate
+		/// # Returns
+		/// Returns a Result type that holds either the returned data value (as a reference) from
+		/// the 2D array, or a *LookUpError* signalling that the coordinate is out of bounds
 		pub fn get(&self, x: usize, y: usize) -> Result<&T,LookUpError>{
 			if x < self.width && y < self.height {
 				Ok(self.patches[patch_index(x, y, self.pwidth)].get(x, y))
@@ -100,6 +171,17 @@ pub mod z2d {
 			}
 		}
 
+		/// Sets a value in the 2D array, or returns a *LookUpError* if the provided coordinate
+		/// is out of bounds. If you want out-of-bound coordinates to result in a no-op, then use
+		/// the *bounded_set(x, y, val)* method instead. If you want access to wrap-around (eg
+		/// (-2, 0) equivalent to (width-2,0)), then use the *wrapped_set(x, y, val)* method.
+		/// # Parameters
+		/// * **x** - x dimension coordinate
+		/// * **y** - y dimension coordinate
+		/// * **new_val** - value to store in the 2D array at (x, y)
+		/// # Returns
+		/// Returns a Result type that is either empty or a *LookUpError* signalling that the
+		/// coordinate is out of bounds
 		pub fn set(&mut self, x: usize, y: usize, new_val: T) -> Result<(),LookUpError>{
 			if x < self.width && y < self.height {
 				Ok(self.patches[patch_index(x, y, self.pwidth)].set(x, y, new_val))
@@ -108,18 +190,43 @@ pub mod z2d {
 			}
 		}
 
+		/// Gets a value from the 2D array, wrapping around the X and Y axese when the coordinates
+		/// are negative or outside the size of this 2D array. Good for when you want tiling
+		/// behavior.
+		/// # Parameters
+		/// * **x** - x dimension coordinate
+		/// * **y** - y dimension coordinate
+		/// # Returns
+		/// Returns a reference to the data stored at the provided coordinate (wrapping both x
+		/// and y dimensions)
 		pub fn wrapped_get(&self, x: isize, y: isize) -> &T{
 			let x = (self.width as isize + (x % self.width as isize)) as usize % self.width;
 			let y = (self.height as isize + (y % self.height as isize)) as usize % self.height;
 			return &self.patches[patch_index(x, y, self.pwidth)].get(x, y);
 		}
 
+		/// Sets a value in the 2D array at the provided coordinate, wrapping the X and Y axese
+		/// if the coordinate is negative or out of bounds.
+		/// # Parameters
+		/// * **x** - x dimension coordinate
+		/// * **y** - y dimension coordinate
+		/// * **new_val** - value to store in the 2D array at (x, y), wrapping around both the x
+		/// and y dimensions
 		pub fn wrapped_set(&mut self, x: isize, y: isize, new_val: T) {
 			let x = (self.width as isize + (x % self.width as isize)) as usize % self.width;
 			let y = (self.height as isize + (y % self.height as isize)) as usize % self.height;
 			self.patches[patch_index(x, y, self.pwidth)].set(x, y, new_val);
 		}
 
+		/// Gets a value from the 2D array as an Option that is None if the coordinate
+		/// is out of bounds.
+		/// # Parameters
+		/// * **x** - x dimension coordinate
+		/// * **y** - y dimension coordinate
+		/// # Returns
+		/// Returns an Option type that holds either the returned data value (as a reference) from
+		/// the 2D array, or *None* signalling that the coordinate is out of bounds (which can be
+		/// combined with .unwrap_or(default_value) to implement an out-of-bounds default)
 		pub fn bounded_get(&self, x: isize, y: isize) -> Option<&T>{
 			if x >= 0 && y >= 0 && x < self.width as isize && y < self.height as isize {
 				return Some(&self.patches[patch_index(x as usize, y as usize, self.pwidth)]
@@ -129,6 +236,12 @@ pub mod z2d {
 			}
 		}
 
+		/// Sets a value in the 2D array if and only if the provided coordinate is in bounds.
+		/// Otherwise this method does nothing if the coordiante is out of bounds.
+		/// # Parameters
+		/// * **x** - x dimension coordinate
+		/// * **y** - y dimension coordinate
+		/// * **new_val** - value to store int eh 2D array at (x, y)
 		pub fn bounded_set(&mut self, x: isize, y: isize, new_val: T) {
 			if x >= 0 && y >= 0 && x < self.width as isize && y < self.height as isize {
 				self.patches[patch_index(x as usize, y as usize, self.pwidth)]
@@ -137,9 +250,63 @@ pub mod z2d {
 				// no-op
 			}
 		}
+
+		/// Fills a region of this 2D array with a given value, or returns a *LookUpError* if the
+		/// provided coordinates go out of bounds. If you just want to ignore any
+		/// out-of-bounds coordinates, then you should use the *bounded_fill(x1, y1, x2, y2)*
+		/// method instead. If you want access to wrap-around (eg (-2, 0) equivalent to
+		/// (width-2,0)), then use the *wrapped_fill(x, y)* method.
+		/// # Parameters
+		/// * **x1** - the first x dimension coordinate (inclusive)
+		/// * **y1** - the first y dimension coordinate (inclusive)
+		/// * **x2** - the second x dimension coordinate (exclusive)
+		/// * **y2** - the second y dimension coordinate (exclusive)
+		/// * **new_val** - value to store in the 2D array in the bounding box defined by
+		/// (x1, y1) -> (x2, y2)
+		/// # Returns
+		/// Returns a Result type that is either empty or a *LookUpError* signalling that a
+		/// coordinate is out of bounds
+		pub fn fill(&mut self, x1: usize, y1: usize, x2: usize, y2: usize, new_val: T)
+					-> Result<(), LookUpError> {
+			for y in y1..y2{ for x in x1..x2{
+				self.set(x, y, new_val)?;
+			} }
+			Ok(())
+		}
+
+		/// Fills a region of this 2D array with a given value, ignoring any
+		/// coordinates that go out of bounds.
+		/// # Parameters
+		/// * **x1** - the first x dimension coordinate (inclusive)
+		/// * **y1** - the first y dimension coordinate (inclusive)
+		/// * **x2** - the second x dimension coordinate (exclusive)
+		/// * **y2** - the second y dimension coordinate (exclusive)
+		/// * **new_val** - value to store in the 2D array in the bounding box defined by
+		/// (x1, y1) -> (x2, y2)
+		pub fn wrapped_fill(&mut self, x1: isize, y1: isize, x2: isize, y2: isize, new_val: T) {
+			for y in y1..y2{ for x in x1..x2{
+				self.wrapped_set(x, y, new_val);
+			} }
+		}
+
+		/// Fills a region of this 2D array with a given value, wrapping the axese when
+		/// coordinates go out of bounds.
+		/// # Parameters
+		/// * **x1** - the first x dimension coordinate (inclusive)
+		/// * **y1** - the first y dimension coordinate (inclusive)
+		/// * **x2** - the second x dimension coordinate (exclusive)
+		/// * **y2** - the second y dimension coordinate (exclusive)
+		/// * **new_val** - value to store in the 2D array in the bounding box defined by
+		/// (x1, y1) -> (x2, y2) with wrapped axese
+		pub fn bounded_fill(&mut self, x1: isize, y1: isize, x2: isize, y2: isize, new_val: T) {
+			for y in y1..y2{ for x in x1..x2{
+				self.bounded_set(x, y, new_val);
+			} }
+		}
+
 	}
 
-
+	/// Used for Z-index look-up
 	static ZLUT: [u8; 16] = [
 		0b00000000,
 		0b00000001,
@@ -159,22 +326,91 @@ pub mod z2d {
 		0b01010101
 	];
 
+	/// General purpose Z-index function to convert a two-dimensional coordinate into a localized
+	/// one-dimensional coordinate
+	/// # Parameters
+	/// * **x** - x dimension coordinate *(ONLY THE LOWER 4 BITS WILL BE USED!)*
+	/// * **y** - y dimension coordinate *(ONLY THE LOWER 4 BITS WILL BE USED!)*
+	/// # Returns
+	/// Z-curve index for use as an index in a linear array meant to hold 2D data. In other words,
+	/// given the binary numbers X=0b0000xxxx and Y=0b0000yyyy, this method will return 0byxyxyxyx.
 	pub fn zorder_4bit_to_8bit(x: u8, y: u8) -> u8 {
 		let x_bits = ZLUT[(x & 0x0F) as usize];
 		let y_bits = ZLUT[(y & 0x0F) as usize] << 1;
 		return y_bits | x_bits;
 	}
 
+	/// General purpose Z-index function to convert a two-dimensional coordinate into a localized
+	/// one-dimensional coordinate
+	/// # Parameters
+	/// * **x** - x dimension coordinate (8 bits)
+	/// * **y** - y dimension coordinate (8 bits)
+	/// # Returns
+	/// Z-curve index for use as an index in a linear array meant to hold 2D data. In other words,
+	/// given the binary numbers Y=0b0000xxxx and Y=0b0000yyyy, this method will return 0byxyxyxyx.
 	pub fn zorder_8bit_to_16bit(x:u8, y:u8) -> u16 {
 		return ((zorder_4bit_to_8bit(x >> 4, y >> 4) as u16) << 8) | zorder_4bit_to_8bit(x, y) as u16
 	}
 
+	/// General purpose Z-index function to convert a two-dimensional coordinate into a localized
+	/// one-dimensional coordinate
+	/// # Parameters
+	/// * **x** - x dimension coordinate (16 bits)
+	/// * **y** - y dimension coordinate (16 bits)
+	/// # Returns
+	/// Z-curve index for use as an index in a linear array meant to hold 2D data. In other words,
+	/// given the binary numbers Y=0b0000xxxx and Y=0b0000yyyy, this method will return 0byxyxyxyx.
 	pub fn zorder_16bit_to_32bit(x:u16, y:u16) -> u32 {
 		return ((zorder_8bit_to_16bit((x & 0xFF) as u8, (y & 0xFF) as u8) as u32) << 16) | zorder_8bit_to_16bit((x >> 8) as u8, (y >> 8) as u8) as u32
 	}
 
 }
 
+/// This module is used for storing 3-dimensional data arrays, and internally uses Z-index arrays
+/// to improve data localization and alignment to the CPU cache-line fetches. In other words, use
+/// this to improve performance for 2D data that is randomly accessed rather than raster scanned
+/// or if your data processing makes heavy use of neighbor look-up in both the X and Y directions.
+/// # How It Works
+/// When you initialize a zarray::z3d::ZArray3D struct, it creates an array of 8x8x8 data patches
+/// (512 total elements per patch), using Z-curve indexing within that patch. When you call a
+/// getter or setter method, it finds the corresponding data patch and then looks up (or sets) the
+/// data from within the patch.
+/// # Example Usage
+/// The following example could be used as part of an erosion simulation:
+/// ```
+/// use zarray::z3d::ZArray3D;
+/// let width = 100;
+/// let length = 200;
+/// let depth = 25;
+/// let air = 0f32;
+/// let soil_hardness = 1f32;
+/// let rock_hardness = 8f32;
+/// let drip_power = 1.5f32;
+/// let iterations = 12;
+/// let mut map = ZArray3D::new(width, length, depth, air);
+/// map.fill(0,0,5, width,length,depth, soil_hardness).unwrap();
+/// map.fill(0,0,15, width,length,depth, rock_hardness).unwrap();
+/// for boulder in [(34,88,6), (66,122,9), (11,154,5), (35,93,8), (72,75,12)]{
+///   map.set(boulder.0, boulder.1, boulder.2, rock_hardness).unwrap();
+/// }
+/// for _ in 0..iterations{
+///   for x in 0..width{for y in 0..length{
+///     let mut drip = drip_power;
+///     let mut z = 0;
+///     while drip > 0f32 {
+///       let h = *map.bounded_get(x as isize, y as isize, z).unwrap_or(&100f32);
+///       if h > drip {
+///         map.bounded_set(x as isize, y as isize, z, h - drip);
+///         drip = 0.;
+///       } else {
+///         map.bounded_set(x as isize, y as isize, z, 0.);
+///         drip -= h;
+///       }
+///       z += 1;
+///     }
+///   }}
+/// }
+/// ```
 pub mod z3d {
 	// Z-order indexing in 2 dimensions
 
@@ -182,16 +418,31 @@ pub mod z3d {
 	use crate::LookUpError;
 
 
+	/// Private struct for holding an 8x8x8 data patch
 	struct Patch<T>{
 		contents: [T;512]
 	}
 
 	impl<T> Patch<T> {
+		/// data patch getter
+		/// # Parameters
+		/// * **x** - x coord (only lowest 3 bits are used, rest of bits are ignored)
+		/// * **y** - y coord (only lowest 3 bits are used, rest of bits are ignored)
+		/// * **z** - z coord (only lowest 3 bits are used, rest of bits are ignored)
+		/// # Returns
+		/// Returns a reference to the value stored in the patch at location (x, y, z) (lowest 3
+		/// bits only)
 		fn get(&self, x: usize, y:usize, z:usize) -> &T {
 			// 3-bit x 3-bit x 3-bit
 			return &self.contents[zorder_4bit_to_12bit(
 				x as u8 & 0x07, y as u8 & 0x07, z as u8 & 0x07) as usize];
 		}
+		/// data patch setter
+		/// # Parameters
+		/// * **x** - x coord (only lowest 3 bits are used, rest of bits are ignored)
+		/// * **y** - y coord (only lowest 3 bits are used, rest of bits are ignored)
+		/// * **z** - z coord (only lowest 3 bits are used, rest of bits are ignored)
+		/// * **new_val** - value to set at (x,y,z)
 		fn set(&mut self, x: usize, y:usize, z:usize, new_val: T) {
 			// 3-bit x 3-bit
 			let i = zorder_4bit_to_12bit(
@@ -200,10 +451,13 @@ pub mod z3d {
 		}
 	}
 
+	/// function for converting coordinate to index of data patch in the array of patches
 	fn patch_index(x: usize, y:usize, z:usize, pxsize: usize, pysize: usize) -> usize{
 		return (x >> 3) + pxsize * ((y >> 3) + (pysize * (z >> 3)));
 	}
 
+	/// This is primary struct for z-indexed 3D arrays. Create new instances with
+	/// ZArray3D::new(x_size, y_size, z_size, initial_value)
 	pub struct ZArray3D<T> {
 		// for heap allocated data
 		xsize: usize,
@@ -216,6 +470,15 @@ pub mod z3d {
 	}
 
 	impl<T> ZArray3D<T> where T: Copy {
+		/// Create a Z-index 3D array of values, initially filled with the provided default value
+		/// # Parameters
+		/// * **xsize** - size of this 3D array in the X dimension
+		/// * **ysize** - size of this 3D array in the Y dimension
+		/// * **zsize** - size of this 3D array in the Z dimension
+		/// * **default_val** - initial fill value (if a struct type, then it must implement the
+		/// Copy trait)
+		/// # Returns
+		/// Returns an initialized *ZArray3D* struct filled with *default_val*
 		pub fn new(xsize: usize, ysize: usize, zsize: usize, default_val: T) -> ZArray3D<T>{
 			let px = (xsize >> 3) + 1;
 			let py = (ysize >> 3) + 1;
@@ -230,6 +493,18 @@ pub mod z3d {
 		}
 
 
+		/// Gets a value from the 3D array, or returns a *LookUpError* if the provided coordinate
+		/// is out of bounds. If you are using a default value for out-of-bounds coordinates,
+		/// then you should use the *bounded_get(x, y, z)* method instead. If you want access to
+		/// wrap-around (eg (-2, 0, 1) equivalent to (width-2, 0, 1)), then use the
+		/// *wrapped_get(x, y, z)* method.
+		/// # Parameters
+		/// * **x** - x dimension coordinate
+		/// * **y** - y dimension coordinate
+		/// * **z** - z dimension coordinate
+		/// # Returns
+		/// Returns a Result type that holds either the returned data value (as a reference) from
+		/// the 3D array, or a *LookUpError* signalling that the coordinate is out of bounds
 		pub fn get(&self, x: usize, y: usize, z: usize) -> Result<&T,LookUpError>{
 			if x < self.xsize && y < self.ysize && z < self.zsize {
 				Ok(self.patches[patch_index(x, y, z, self.pxsize, self.pysize)].get(x, y, z))
@@ -239,6 +514,19 @@ pub mod z3d {
 			}
 		}
 
+		/// Sets a value in the 3D array, or returns a *LookUpError* if the provided coordinate
+		/// is out of bounds. If you want out-of-bound coordinates to result in a no-op, then use
+		/// the *bounded_set(x, y, z, val)* method instead. If you want access to wrap-around (eg
+		/// (-2, 0, 1) equivalent to (width-2, 0, 1)), then use the
+		/// *wrapped_set(x, y, z, val)* method.
+		/// # Parameters
+		/// * **x** - x dimension coordinate
+		/// * **y** - y dimension coordinate
+		/// * **z** - z dimension coordinate
+		/// * **new_val** - value to store in the 3D array at (x, y, z)
+		/// # Returns
+		/// Returns a Result type that is either empty or a *LookUpError* signalling that the
+		/// coordinate is out of bounds
 		pub fn set(&mut self, x: usize, y: usize, z: usize, new_val: T) -> Result<(),LookUpError>{
 			if x < self.xsize && y < self.ysize && z < self.zsize {
 				Ok(self.patches[patch_index(x, y, z, self.pxsize, self.pysize)]
@@ -249,6 +537,16 @@ pub mod z3d {
 			}
 		}
 
+		/// Gets a value from the 3D array, wrapping around the X and Y axese when the coordinates
+		/// are negative or outside the size of this 2D array. Good for when you want tiling
+		/// behavior.
+		/// # Parameters
+		/// * **x** - x dimension coordinate
+		/// * **y** - y dimension coordinate
+		/// * **z** - z dimension coordinate
+		/// # Returns
+		/// Returns a reference to the data stored at the provided coordinate (wrapping both x
+		/// and y dimensions)
 		pub fn wrapped_get(&self, x: isize, y: isize, z: isize) -> &T{
 			let x = (self.xsize as isize + (x % self.xsize as isize)) as usize % self.xsize;
 			let y = (self.ysize as isize + (y % self.ysize as isize)) as usize % self.ysize;
@@ -256,6 +554,14 @@ pub mod z3d {
 			return &self.patches[patch_index(x, y, z, self.pxsize, self.pysize)].get(x, y, z);
 		}
 
+		/// Sets a value in the 3D array at the provided coordinate, wrapping the X, Y, and Z axese
+		/// if the coordinate is negative or out of bounds.
+		/// # Parameters
+		/// * **x** - x dimension coordinate
+		/// * **y** - y dimension coordinate
+		/// * **z** - z dimension coordinate
+		/// * **new_val** - value to store in the 3D array at (x, y, z), wrapping around
+		/// the x, y, and z dimensions
 		pub fn wrapped_set(&mut self, x: isize, y: isize, z: isize, new_val: T) {
 			let x = (self.xsize as isize + (x % self.xsize as isize)) as usize % self.xsize;
 			let y = (self.ysize as isize + (y % self.ysize as isize)) as usize % self.ysize;
@@ -263,6 +569,16 @@ pub mod z3d {
 			self.patches[patch_index(x, y, z, self.pxsize, self.pysize)].set(x, y, z, new_val);
 		}
 
+		/// Gets a value from the 3D array as an Option that is None if the coordinate
+		/// is out of bounds.
+		/// # Parameters
+		/// * **x** - x dimension coordinate
+		/// * **y** - y dimension coordinate
+		/// * **z** - z dimension coordinate
+		/// # Returns
+		/// Returns an Option type that holds either the returned data value (as a reference) from
+		/// the 3D array, or *None* signalling that the coordinate is out of bounds (which can be
+		/// combined with .unwrap_or(default_value) to implement an out-of-bounds default)
 		pub fn bounded_get(&self, x: isize, y: isize, z: isize) -> Option<&T>{
 			if x >= 0 && y >= 0 && z >= 0
 				&& x < self.xsize as isize && y < self.ysize as isize && z < self.zsize as isize {
@@ -274,6 +590,13 @@ pub mod z3d {
 			}
 		}
 
+		/// Sets a value in the 3D array if and only if the provided coordinate is in bounds.
+		/// Otherwise this method does nothing if the coordinate is out of bounds.
+		/// # Parameters
+		/// * **x** - x dimension coordinate
+		/// * **y** - y dimension coordinate
+		/// * **z** - z dimension coordinate
+		/// * **new_val** - value to store int eh zD array at (x, y, z)
 		pub fn bounded_set(&mut self, x: isize, y: isize, z: isize, new_val: T) {
 			if x >= 0 && y >= 0 && z >= 0
 				&& x < self.xsize as isize && y < self.ysize as isize && z < self.zsize as isize {
@@ -284,9 +607,72 @@ pub mod z3d {
 				// no-op
 			}
 		}
+
+		/// Fills a region of this 3D array with a given value, or returns a *LookUpError* if the
+		/// provided coordinates go out of bounds. If you just want to ignore any
+		/// out-of-bounds coordinates, then you should use the
+		/// *bounded_fill(x1, y1, z1, x2, y2, z2)*
+		/// method instead. If you want access to wrap-around (eg (-2, 0, 1) equivalent to
+		/// (width-2, 0, 1)), then use the *wrapped_fill(x, y, z)* method.
+		/// # Parameters
+		/// * **x1** - the first x dimension coordinate (inclusive)
+		/// * **y1** - the first y dimension coordinate (inclusive)
+		/// * **z1** - the first z dimension coordinate (inclusive)
+		/// * **x2** - the second x dimension coordinate (exclusive)
+		/// * **y2** - the second y dimension coordinate (exclusive)
+		/// * **z2** - the second z dimension coordinate (exclusive)
+		/// * **new_val** - value to store in the 2D array in the bounding box defined by
+		/// (x1, y1, z1) -> (x2, y2, z2)
+		/// # Returns
+		/// Returns a Result type that is either empty or a *LookUpError* signalling that a
+		/// coordinate is out of bounds
+		pub fn fill(&mut self, x1: usize, y1: usize, z1: usize, x2: usize, y2: usize, z2: usize,
+					new_val: T)
+					-> Result<(), LookUpError> {
+			for y in y1..y2{ for x in x1..x2{ for z in z1..z2{
+				self.set(x, y, z, new_val)?;
+			} } }
+			Ok(())
+		}
+
+		/// Fills a region of this 3D array with a given value, ignoring any
+		/// coordinates that go out of bounds.
+		/// # Parameters
+		/// * **x1** - the first x dimension coordinate (inclusive)
+		/// * **y1** - the first y dimension coordinate (inclusive)
+		/// * **z1** - the first z dimension coordinate (inclusive)
+		/// * **x2** - the second x dimension coordinate (exclusive)
+		/// * **y2** - the second y dimension coordinate (exclusive)
+		/// * **z2** - the second z dimension coordinate (exclusive)
+		/// * **new_val** - value to store in the 3D array in the bounding box defined by
+		/// (x1, y1, z1) -> (x2, y2, z2)
+		pub fn wrapped_fill(&mut self, x1: isize, y1: isize, z1: isize,
+							x2: isize, y2: isize, z2: isize, new_val: T) {
+			for y in y1..y2{ for x in x1..x2{ for z in z1..z2{
+				self.wrapped_set(x, y, z, new_val);
+			} } }
+		}
+
+		/// Fills a region of this 3D array with a given value, wrapping the axese when
+		/// coordinates go out of bounds.
+		/// # Parameters
+		/// * **x1** - the first x dimension coordinate (inclusive)
+		/// * **y1** - the first y dimension coordinate (inclusive)
+		/// * **z1** - the first z dimension coordinate (inclusive)
+		/// * **x2** - the second x dimension coordinate (exclusive)
+		/// * **y2** - the second y dimension coordinate (exclusive)
+		/// * **z2** - the second z dimension coordinate (exclusive)
+		/// * **new_val** - value to store in the 3D array in the bounding box defined by
+		/// (x1, y1, z1) -> (x2, y2, z2)
+		pub fn bounded_fill(&mut self, x1: isize, y1: isize, z1: isize,
+							x2: isize, y2: isize, z2: isize, new_val: T) {
+			for y in y1..y2{ for x in x1..x2{ for z in z1..z2{
+				self.bounded_set(x, y, z, new_val);
+			} } }
+		}
 	}
 
-
+	/// Used for converting 3D coords to linear Z-index
 	static ZLUT: [u16; 16] = [
 		0b0000000000000000,
 		0b0000000000000001,
@@ -306,13 +692,32 @@ pub mod z3d {
 		0b0000001001001001
 	];
 
+	/// General purpose Z-index function to convert a three-dimensional coordinate into a localized
+	/// one-dimensional coordinate
+	/// # Parameters
+	/// * **x** - x dimension coordinate *(ONLY THE LOWER 4 BITS WILL BE USED!)*
+	/// * **y** - y dimension coordinate *(ONLY THE LOWER 4 BITS WILL BE USED!)*
+	/// * **z** - z dimension coordinate *(ONLY THE LOWER 4 BITS WILL BE USED!)*
+	/// # Returns
+	/// Z-curve index for use as an index in a linear array meant to hold 2D data. In other words,
+	/// given the binary numbers X=0b0000xxxx, Y=0b0000yyyy, and Z=0b0000zzzz, then this method
+	/// will return 0b0000zyxzyxzyxzyx.
 	pub fn zorder_4bit_to_12bit(x: u8, y: u8, z: u8) -> u16 {
 		let x_bits = ZLUT[(x & 0x0F) as usize];
 		let y_bits = ZLUT[(y & 0x0F) as usize] << 1;
 		let z_bits = ZLUT[(z & 0x0F) as usize] << 2;
 		return z_bits | y_bits | x_bits;
 	}
-
+	/// General purpose Z-index function to convert a three-dimensional coordinate into a localized
+	/// one-dimensional coordinate
+	/// # Parameters
+	/// * **x** - x dimension coordinate (8 bit)
+	/// * **y** - y dimension coordinate (8 bit)
+	/// * **z** - z dimension coordinate (8 bit)
+	/// # Returns
+	/// Z-curve index for use as an index in a linear array meant to hold 2D data. In other words,
+	/// given the binary numbers X=0b0000xxxx, Y=0b0000yyyy, and Z=0b0000zzzz, then this method
+	/// will return 0b0000zyxzyxzyxzyx.
 	pub fn zorder_8bit_to_24bit(x:u8, y:u8, z: u8) -> u32 {
 		return ((zorder_4bit_to_12bit(x >> 4, y >> 4, z >> 4) as u32) << 12)
 			| zorder_4bit_to_12bit(x, y, z) as u32
@@ -815,5 +1220,40 @@ mod tests {
 		println!("ZArray2D {}x{}x{} sum of neighbors in radius {} performance: {} micros", w, h, d,
 				 radius, my_time as i32);
 		println!("Performance improved by {}%", (100. * (ref_time / my_time - 1.)) as i32);
+	}
+
+	#[test]
+	fn test_erosion_dim(){
+		let width = 100;
+		let length = 200;
+		let depth = 25;
+		let air = 0f32;
+		let soil_hardness = 1f32;
+		let rock_hardness = 8f32;
+		let drip_power = 1.5f32;
+		let iterations = 12;
+		let mut map = ZArray3D::new(width, length, depth, air);
+		map.fill(0,0,5, width,length,depth, soil_hardness).unwrap();
+		map.fill(0,0,15, width,length,depth, rock_hardness).unwrap();
+		for boulder in [(34,88,6), (66,122,9), (11,154,5), (35,93,8), (72,75,12)]{
+			map.set(boulder.0, boulder.1, boulder.2, rock_hardness).unwrap();
+		}
+		for _ in 0..iterations{
+			for x in 0..width{for y in 0..length{
+				let mut drip = drip_power;
+				let mut z = 0;
+				while drip > 0f32 {
+					let h = *map.bounded_get(x as isize, y as isize, z).unwrap_or(&100f32);
+					if h > drip {
+						map.bounded_set(x as isize, y as isize, z, h - drip);
+						drip = 0.;
+					} else {
+						map.bounded_set(x as isize, y as isize, z, 0.);
+						drip -= h;
+					}
+					z += 1;
+				}
+			}}
+		}
 	}
 }
