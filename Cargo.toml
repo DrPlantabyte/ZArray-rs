@@ -7,3 +7,4 @@ edition = "2021"
 # none
 [dev-dependencies]
 rand = "*"
+pathfinding = "3.*"

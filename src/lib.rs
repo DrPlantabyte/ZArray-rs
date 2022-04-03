@@ -108,6 +108,36 @@ pub mod z2d {
 				Err(LookUpError{coord: vec![x, y], bounds: vec![self.width, self.height]})
 			}
 		}
+
+		pub fn wrapped_get(&self, x: isize, y: isize) -> &T{
+			let x = (self.width as isize + (x % self.width as isize)) as usize % self.width;
+			let y = (self.height as isize + (y % self.height as isize)) as usize % self.height;
+			return &self.patches[patch_index(x, y, self.pwidth)].get(x, y);
+		}
+
+		pub fn wrapped_set(&mut self, x: isize, y: isize, new_val: T) {
+			let x = (self.width as isize + (x % self.width as isize)) as usize % self.width;
+			let y = (self.height as isize + (y % self.height as isize)) as usize % self.height;
+			self.patches[patch_index(x, y, self.pwidth)].set(x, y, new_val);
+		}
+
+		pub fn bounded_get(&self, x: isize, y: isize) -> Option<&T>{
+			if x >= 0 && y >= 0 && x < self.width as isize && y < self.height as isize {
+				return Some(&self.patches[patch_index(x as usize, y as usize, self.pwidth)]
+					.get(x as usize, y as usize));
+			} else {
+				return None;
+			}
+		}
+
+		pub fn bounded_set(&mut self, x: isize, y: isize, new_val: T) {
+			if x >= 0 && y >= 0 && x < self.width as isize && y < self.height as isize {
+				self.patches[patch_index(x as usize, y as usize, self.pwidth)]
+					.set(x as usize, y as usize, new_val);
+			} else {
+				// no-op
+			}
+		}
 	}
 
 
@@ -197,6 +227,65 @@ mod tests {
 			}
 		}
 	}
+
+	#[test]
+	fn test_zarray2dmap_wrapped_get_set(){
+		let h: usize = 20;
+		let w: usize = 20;
+		let (mut ref_map, mut map) = seed_arrays_u8(w, h);
+		let mut prng = StdRng::seed_from_u64(20220331u64);
+		// set values
+		for y in -10..10 as isize{
+			for x in -10..10 as isize {
+				let v: u8 = prng.gen();
+				ref_map[((20+y%20)%20) as usize][((20+x%20)%20) as usize] = v;
+				map.wrapped_set(x, y, v);
+			}
+		}
+		let m: isize = 101;
+		let v: u8 = prng.gen();
+		ref_map[((20+m%20)%20) as usize][((20+(3*m)%20)%20) as usize] = v;
+		map.wrapped_set(3*m, m, v);
+		// get values
+		for y in 0..h {
+			for x in 0..w {
+				assert_eq!(ref_map[y][x], *map.get(x, y).unwrap());
+			}
+		}
+	}
+
+
+	#[test]
+	fn test_zarray2dmap_bounded_get_set(){
+		let h: usize = 20;
+		let w: usize = 20;
+		let (mut ref_map, mut map) = seed_arrays_u8(w, h);
+		let mut prng = StdRng::seed_from_u64(20220331u64);
+		// set values
+		for y in -10..10 as isize{
+			for x in -10..10 as isize {
+				let v: u8 = prng.gen();
+				if x >= 0 && x < w as isize && y >= 0 && y < h as isize {
+					ref_map[y as usize][x as usize] = v;
+				}
+				map.bounded_set(x, y, v);
+			}
+		}
+		let oob: u8 = 127;
+		let m: isize = 101;
+		let v: u8 = prng.gen();
+		map.bounded_set(3*m, m, v); // should be a no-op
+		// get values
+		for y in 0..h {
+			for x in 0..w {
+				assert_eq!(ref_map[y][x], *map.bounded_get(x as isize, y as isize).unwrap_or(&oob));
+			}
+		}
+		assert_eq!(oob, *map.bounded_get(-1, 0).unwrap_or(&oob));
+		assert_eq!(oob, *map.bounded_get(0,  -1).unwrap_or(&oob));
+		assert_eq!(oob, *map.bounded_get(w as isize,  h as isize).unwrap_or(&oob));
+	}
+
 	#[test]
 	fn test_zarray2dmap_power_of_8(){
 		let h: usize = 64;
@@ -242,10 +331,10 @@ mod tests {
 	}
 
 	#[test]
-	fn test_zarray2dmap_performance_neighbors(){
-		use std::time::{Duration, Instant};
-		let h: usize = 100;
-		let w: usize = 100;
+	fn test_zarray2dmap_performance_neighborsum(){
+		use std::time::Instant;
+		let h: usize = 300;
+		let w: usize = 300;
 		let (mut ref_map, mut map) = seed_arrays_u8(w, h);
 		let mut prng = StdRng::seed_from_u64(20220331u64);
 		// set values
@@ -296,16 +385,17 @@ mod tests {
 		}
 		let t1 = Instant::now();
 		let my_time = (t1-t0).as_secs_f64()*1e6;
-		println!("ZArray2D {}x{} sum of neighbors performance: {} micros", w, h, my_time);
+		println!("ZArray2D {}x{} sum of neighbors in radius {} performance: {} micros", w, h,
+			radius, my_time);
 		println!("Performance improved by {}%", (100. * (ref_time / my_time - 1.)) as i32);
 	}
 
 	#[test]
 	fn test_zarray2dmap_performance_pathfinding(){
-		use std::time::{Duration, Instant};
-		use std::collections::BTreeMap; // sorted map/set
-		let h: usize = 100;
-		let w: usize = 100;
+		use std::time::Instant;
+		use pathfinding::prelude::{absdiff, astar};
+		let h: usize = 300;
+		let w: usize = 300;
 		let (mut ref_map, mut map) = seed_arrays_u8(w, h);
 		let mut prng = StdRng::seed_from_u64(20220331u64);
 		// set values
@@ -316,46 +406,49 @@ mod tests {
 				map.set(x, y, v).unwrap();
 			}
 		}
-		// sum neighbors values with benchmark reference (vecs)
-		
+		// A* pathfinding with benchmark reference (vecs)
+		let oob: u8 = 127;
+		let goal: (i32, i32) = (w as i32 - 1, h as i32 - 1);
+		let start: (i32, i32) = (1, 1);
 		let t0 = Instant::now();
-		for y in radius..h-radius {
-			for x in radius..w-radius {
-				let mut sum = 0;
-				for ry in 0..rad_plus as i32 {
-					let dy = ry - radius as i32;
-					for rx in 0..rad_plus as i32 {
-						let dx = rx - radius as i32;
-						sum += ref_map[(y as i32+dy) as usize][(x as i32+dx) as usize] as u16;
-					}
-				}
-				ref_map_sums[y][x] = sum;
-			}
-		}
+		let result = astar(
+			&start,
+			|&(x, y)| vec![
+							(x+1,y), (x-1,y), (x,y+1), (x,y-1)
+					].into_iter().map(|p:(i32, i32)| (p,
+						if p.0 >= 0 && p.1 >= 0 && p.0 < w as i32 && p.1 < h as i32 {
+							ref_map[p.1 as usize][p.0 as usize] as i32} else {oob as i32})),
+			|&(x, y)| absdiff(x, goal.0) + absdiff(y, goal.1),
+			|&p| p == goal
+		);
+		let (ref_path, ref_cost) = result.unwrap();
 		let t1 = Instant::now();
 		let ref_time =  (t1-t0).as_secs_f64()*1e6;
-		println!("Vec<Vec<u16>> {}x{} sum of neighbors in radius {} performance: {} micros", w, h, radius, ref_time);
+		println!("Vec<Vec<u16>> {}x{} A* path from ({},{}) to ({},{}) (path length = {}, cost = \
+		{}) performance: {} micros",
+				 w, h, start.0, start.1, goal.0, goal.1, ref_path.len(), ref_cost, ref_time);
 
-		// sum neighbors values with ZArray
-		let mut map_sums = ZArray2D::new(w, h, 0u16);
+		// A* pathfinding with ZArray
 		let t0 = Instant::now();
-		for y in radius..h-radius {
-			for x in radius..w-radius {
-				let mut sum = 0;
-				for ry in 0..rad_plus as i32 {
-					let dy = ry - radius as i32;
-					for rx in 0..rad_plus as i32 {
-						let dx = rx - radius as i32;
-						sum += *map.get((x as i32+dx) as usize, (y as i32+dy) as usize).unwrap() as u16;
-					}
-				}
-				map_sums.set(x, y, sum).unwrap();
-			}
-		}
+		let result = astar(
+			&start,
+			|&(x, y)| vec![
+				(x+1,y), (x-1,y), (x,y+1), (x,y-1)
+			].into_iter().map(|p:(i32, i32)| (p, *map.bounded_get(p.0 as isize, p.1 as isize )
+				.unwrap_or(&oob) as i32)),
+			|&(x, y)| absdiff(x, goal.0) + absdiff(y, goal.1),
+			|&p| p == goal
+		);
+		let (my_path, my_cost) = result.unwrap();
 		let t1 = Instant::now();
-		let my_time = (t1-t0).as_secs_f64()*1e6;
-		println!("ZArray2D {}x{} sum of neighbors performance: {} micros", w, h, my_time);
+		let my_time =  (t1-t0).as_secs_f64()*1e6;
+		println!("ZArray2D {}x{} A* path from ({},{}) to ({},{}) (path length = {}, cost = \
+		{}) performance: {} micros",
+				 w, h, start.0, start.1, goal.0, goal.1, my_path.len(), my_cost, my_time);
+		assert_eq!(ref_path.len(), my_path.len());
+		assert_eq!(ref_cost, my_cost);
 		println!("Performance improved by {}%", (100. * (ref_time / my_time - 1.)) as i32);
+
 	}
 
 /*
