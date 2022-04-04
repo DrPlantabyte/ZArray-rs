@@ -111,6 +111,7 @@ pub mod z2d {
 	use crate::LookUpError;
 
 	/// Private struct for holding an 8x8 data patch
+	#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
 	struct Patch<T>{
 		contents: [T;64]
 	}
@@ -147,6 +148,7 @@ pub mod z2d {
 
 	/// This is primary struct for z-indexed 2D arrays. Create new instances with
 	/// ZArray2D::new(x_size, y_size, initial_value)
+	#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
 	pub struct ZArray2D<T> {
 		// for heap allocated data
 		width: usize,
@@ -212,6 +214,25 @@ pub mod z2d {
 			} else {
 				Err(LookUpError{coord: vec![x, y], bounds: vec![self.width, self.height]})
 			}
+		}
+
+		/// Gets a value from the 2D array without bounds checking
+		/// # Parameters
+		/// * **x** - x dimension coordinate
+		/// * **y** - y dimension coordinate
+		/// # Returns
+		/// Returns a data value (as a reference) from the 2D array
+		pub fn get_unchecked(&self, x: usize, y: usize) -> &T{
+			return self.patches[patch_index(x, y, self.pwidth)].get(x, y);
+		}
+
+		/// Sets a value in the 2D array without bounds checking
+		/// # Parameters
+		/// * **x** - x dimension coordinate
+		/// * **y** - y dimension coordinate
+		/// * **new_val** - value to store in the 2D array at (x, y)
+		pub fn set_unchecked(&mut self, x: usize, y: usize, new_val: T){
+			self.patches[patch_index(x, y, self.pwidth)].set(x, y, new_val);
 		}
 
 		/// Gets a value from the 2D array, wrapping around the X and Y axese when the coordinates
@@ -443,6 +464,7 @@ pub mod z3d {
 
 
 	/// Private struct for holding an 8x8x8 data patch
+	#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
 	struct Patch<T>{
 		contents: [T;512]
 	}
@@ -482,6 +504,7 @@ pub mod z3d {
 
 	/// This is primary struct for z-indexed 3D arrays. Create new instances with
 	/// ZArray3D::new(x_size, y_size, z_size, initial_value)
+	#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
 	pub struct ZArray3D<T> {
 		// for heap allocated data
 		xsize: usize,
@@ -559,6 +582,28 @@ pub mod z3d {
 				Err(LookUpError{coord: vec![x, y, z],
 					bounds: vec![self.xsize, self.ysize, self.zsize]})
 			}
+		}
+
+		/// Gets a value from the 3D array without bounds checking
+		/// # Parameters
+		/// * **x** - x dimension coordinate
+		/// * **y** - y dimension coordinate
+		/// * **z** - z dimension coordinate
+		/// # Returns
+		/// Returns the data value (as a reference) from the 3D array
+		pub fn get_unchecked(&self, x: usize, y: usize, z: usize) -> &T {
+			return self.patches[patch_index(x, y, z, self.pxsize, self.pysize)].get(x, y, z);
+		}
+
+		/// Sets a value in the 3D array without bounds checking
+		/// # Parameters
+		/// * **x** - x dimension coordinate
+		/// * **y** - y dimension coordinate
+		/// * **z** - z dimension coordinate
+		/// * **new_val** - value to store in the 3D array at (x, y, z)
+		pub fn set_unchecked(&mut self, x: usize, y: usize, z: usize, new_val: T) {
+			self.patches[patch_index(x, y, z, self.pxsize, self.pysize)]
+					.set(x, y, z, new_val);
 		}
 
 		/// Gets a value from the 3D array, wrapping around the X and Y axese when the coordinates
