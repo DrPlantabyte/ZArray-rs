@@ -8,7 +8,7 @@ cache-line performance.
 Simply import *zarray::z2d::ZArray2D* and/or *zarray::z3d::ZArray3D* and then use the
 *ZArray_D::new(...)* function to initialize a new instance. The type will automatically be
 inferred from the povided default value. Note that only types which implement the *Copy* trait
-are allowed (ie not Vec or other head-allocating types).
+are allowed (ie not Vec or other heap-allocating types).
 
 For example, here's a simple blur operation using ZArray2D, which generally performs better
 than using a Vec of Vecs by about 10-25%:
@@ -33,7 +33,7 @@ for y in 0..h { for x in 0..w {
 
 ## How it works
 the *ZArray_D* structs store data in 8x8 or 8x8x8 chuncks, using Z-order indexing to access the
-data within each chunk (as described [here](https://en.wikipedia.org/wiki/Z-order_curve) ). In0
+data within each chunk (as described [here](https://en.wikipedia.org/wiki/Z-order_curve) ). In
 so doing, the lowest 4 bits of each dimension are interdigitated to significantly improve data
 locality and cache-line fetch efficiency (though not as much as a Hilbert curve would do)
 
@@ -41,7 +41,7 @@ locality and cache-line fetch efficiency (though not as much as a Hilbert curve 
 Most of the time, using a Vec<Vec<T>> would have great performance, so long as you remember to
 structure your for-loops correctly. However, when the data is not accessed in a linear fashion,
 such as when implementing a cellular automata or a blurring or ray tracing algorithm, then the
-performance of a Vec<Vec<T>> and be significantly impaired by frequent RAM access and
+performance of a Vec<Vec<T>> can be significantly impaired by frequent RAM access and
 cache-line misses. This is when data locality matters most for performance.
 
 ### Why not Z-Order the entire data array?
