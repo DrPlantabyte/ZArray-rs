@@ -7,7 +7,7 @@ description = """Cache-optimized 2D and 3D arrays using Morton order (aka
 Z-order) Z-indexed storage, with a convenient API for common 2D and 3D access
  patterns. Use of zarray in place of a Vec of Vecs often improves performance,
  especially for algorithms such as blurring and cellular automata."""
-keywords = ["z-order curve", "Z-order", "array", "2D", "3D", "Lebesgue", "Morton", "z-index"]
+keywords = ["zorder", "Z-order", "array", "2D", "3D", "Lebesgue", "Morton", "z-index"]
 categories = ["algorithms", "memory management"]
 license = "MIT"
 repository = "https://github.com/DrPlantabyte/ZArray-rs"
