@@ -112,6 +112,7 @@ pub mod z2d {
 
 	/// Private struct for holding an 8x8 data patch
 	#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
+	#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 	struct Patch<T>{
 		contents: [T;64]
 	}
@@ -149,6 +150,7 @@ pub mod z2d {
 	/// This is primary struct for z-indexed 2D arrays. Create new instances with
 	/// ZArray2D::new(x_size, y_size, initial_value)
 	#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
+	#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 	pub struct ZArray2D<T> {
 		// for heap allocated data
 		width: usize,
@@ -465,6 +467,7 @@ pub mod z3d {
 
 	/// Private struct for holding an 8x8x8 data patch
 	#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
+	#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 	struct Patch<T>{
 		contents: [T;512]
 	}
@@ -505,6 +508,7 @@ pub mod z3d {
 	/// This is primary struct for z-indexed 3D arrays. Create new instances with
 	/// ZArray3D::new(x_size, y_size, z_size, initial_value)
 	#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
+	#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 	pub struct ZArray3D<T> {
 		// for heap allocated data
 		xsize: usize,
