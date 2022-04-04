@@ -10,7 +10,7 @@ Simply import *zarray::z2d::ZArray2D* and/or *zarray::z3d::ZArray3D* and then us
 inferred from the povided default value. Note that only types which implement the *Copy* trait
 are allowed (ie not Vec or other head-allocating types).
 
-For example, here's a simple blur operation using ZArray2D, which generally outperforms better
+For example, here's a simple blur operation using ZArray2D, which generally performs better
 than using a Vec of Vecs by about 10-25%:
 ```rust
 use zarray::z2d::ZArray2D;
