@@ -22,7 +22,11 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
  */
 
-//! # zarray
+//! # ZArray
+//! Z-order indexed 2D and 3D arrays using Morton order (aka Z-order) with a convenient API for
+//! common 2D and 3D access patterns. Use of zarray in place of a Vec of Vecs often improves
+//! performance, especially for algorithms such as blurring and cellular automata.
+//! ## About ZArray
 //! The *zarray* crate  is a lightweight Rust library that provides structs for working with 2D and
 //! 3D arrays, using internal Z-Order Morton indexing to improve data localization for better
 //! cache-line performance.
@@ -30,11 +34,11 @@ SOFTWARE.
 //! Simply import *zarray::z2d::ZArray2D* and/or *zarray::z3d::ZArray3D* and then use the
 //! *ZArray_D::new(...)* function to initialize a new instance. The type will automatically be
 //! inferred from the povided default value. Note that only types which implement the *Copy* trait
-//! are allowed (ie not Vec or other head-allocating types).
+//! are allowed (ie not Vec or other heap-allocating types).
 //!
-//! For example, here's a simple blur operation using ZArray2D, which generally outperforms better
+//! For example, here's a simple blur operation using ZArray2D, which generally performs better
 //! than using a Vec of Vecs by about 10-25%:
-//! ```
+//! ```rust
 //! use zarray::z2d::ZArray2D;
 //! let h: isize = 200;
 //! let w: isize = 300;
@@ -55,7 +59,7 @@ SOFTWARE.
 //!
 //! ## How it works
 //! the *ZArray_D* structs store data in 8x8 or 8x8x8 chuncks, using Z-order indexing to access the
-//! data within each chunk (as described [here](https://en.wikipedia.org/wiki/Z-order_curve) ). In0
+//! data within each chunk (as described [here](https://en.wikipedia.org/wiki/Z-order_curve) ). In
 //! so doing, the lowest 4 bits of each dimension are interdigitated to significantly improve data
 //! locality and cache-line fetch efficiency (though not as much as a Hilbert curve would do)
 //!
@@ -63,7 +67,7 @@ SOFTWARE.
 //! Most of the time, using a Vec<Vec<T>> would have great performance, so long as you remember to
 //! structure your for-loops correctly. However, when the data is not accessed in a linear fashion,
 //! such as when implementing a cellular automata or a blurring or ray tracing algorithm, then the
-//! performance of a Vec<Vec<T>> and be significantly impaired by frequent RAM access and
+//! performance of a Vec<Vec<T>> can be significantly impaired by frequent RAM access and
 //! cache-line misses. This is when data locality matters most for performance.
 //!
 //! ### Why not Z-Order the entire data array?
@@ -84,8 +88,7 @@ SOFTWARE.
 //! This library is provided under the MIT license. In other words: free to use as you wish.
 //!
 //! ## Contributing
-//! If you'd like to contribute, go ahead and fork the GitHub repo and/or submit a pull request:
-//! [ZArray-rs GitHub page](https://github.com/DrPlantabyte/ZArray-rs/)
+//! If you'd like to contribute, go ahead and fork the GitHub repo and/or submit a pull request
 
 use std::error::Error;
 use std::fmt::{Debug, Display, Formatter};
