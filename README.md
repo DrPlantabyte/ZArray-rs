@@ -1,5 +1,8 @@
 # ZArray
 Z-order indexed 2D and 3D arrays using Morton order (aka Z-order) with a convenient API for common 2D and 3D access patterns. Use of zarray in place of a Vec of Vecs often improves performance, especially for algorithms such as blurring and cellular automata.
+
+[Crates.io page](https://crates.io/crates/zarray)
+
 ## About ZArray
 The *zarray* crate  is a lightweight Rust library that provides structs for working with 2D and
 3D arrays, using internal Z-Order Morton indexing to improve data localization for better
