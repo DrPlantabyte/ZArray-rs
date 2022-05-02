@@ -78,7 +78,7 @@ SOFTWARE.
 //! addressing space (ie 8x8 or 4x4x4)
 //!
 //! ## Note
-//! Only types with the *Copy* trait can be stored in *ZArrady_D* structs. Thus *zarray* works for
+//! Only types with the *Copy* trait can be stored in *ZArray_D* structs. Thus *zarray* works for
 //! all numerical types and most simple data structs, but not for heap-allocating data types such
 //! as Vec. This limitation arises from complexities in filling the data patches with initial
 //! values. In addition, you would not see a performance improvement over a simple Vec<Vec<T>> if
@@ -250,6 +250,42 @@ pub mod z2d {
 			return ZArray2D {width, height, pwidth, patches: p, _phantomdata: PhantomData};
 		}
 
+		/// Gets the (x, y) size of this 2D array
+		/// # Returns
+		/// Returns a tuple of (width, height) for this 2D array
+		pub fn dimensions(&self) -> (usize, usize){
+			return (self.width, self.height);
+		}
+
+		/// Gets the X-dimension size (aka width) of this 2D array
+		/// # Returns
+		/// Returns the size in the X dimension
+		pub fn xsize(&self) -> usize {
+			return self.width;
+		}
+
+
+		/// Alias for `xsize()`
+		/// # Returns
+		/// Returns the size in the X dimension
+		pub fn width(&self) -> usize {
+			return self.xsize();
+		}
+
+		/// Gets the Y-dimension size (aka height) of this 2D array
+		/// # Returns
+		/// Returns the size in the Y dimension
+		pub fn ysize(&self) -> usize {
+			return self.height;
+		}
+
+		/// Alias for `ysize()`
+		/// # Returns
+		/// Returns the size in the Y dimension
+		pub fn height(&self) -> usize {
+			return self.ysize();
+		}
+
 		/// Gets a value from the 2D array, or returns a *LookUpError* if the provided coordinate
 		/// is out of bounds. If you are using a default value for out-of-bounds coordinates,
 		/// then you should use the *bounded_get(x, y)* method instead. If you want access to
@@ -391,21 +427,6 @@ pub mod z2d {
 			Ok(())
 		}
 
-		/// Fills a region of this 2D array with a given value, ignoring any
-		/// coordinates that go out of bounds.
-		/// # Parameters
-		/// * **x1** - the first x dimension coordinate (inclusive)
-		/// * **y1** - the first y dimension coordinate (inclusive)
-		/// * **x2** - the second x dimension coordinate (exclusive)
-		/// * **y2** - the second y dimension coordinate (exclusive)
-		/// * **new_val** - value to store in the 2D array in the bounding box defined by
-		/// (x1, y1) -> (x2, y2)
-		pub fn wrapped_fill(&mut self, x1: isize, y1: isize, x2: isize, y2: isize, new_val: T) {
-			for y in y1..y2{ for x in x1..x2{
-				self.wrapped_set(x, y, new_val);
-			} }
-		}
-
 		/// Fills a region of this 2D array with a given value, wrapping the axese when
 		/// coordinates go out of bounds.
 		/// # Parameters
@@ -415,6 +436,21 @@ pub mod z2d {
 		/// * **y2** - the second y dimension coordinate (exclusive)
 		/// * **new_val** - value to store in the 2D array in the bounding box defined by
 		/// (x1, y1) -> (x2, y2) with wrapped axese
+		pub fn wrapped_fill(&mut self, x1: isize, y1: isize, x2: isize, y2: isize, new_val: T) {
+			for y in y1..y2{ for x in x1..x2{
+				self.wrapped_set(x, y, new_val);
+			} }
+		}
+
+		/// Fills a region of this 2D array with a given value, ignoring any
+		/// coordinates that go out of bounds.
+		/// # Parameters
+		/// * **x1** - the first x dimension coordinate (inclusive)
+		/// * **y1** - the first y dimension coordinate (inclusive)
+		/// * **x2** - the second x dimension coordinate (exclusive)
+		/// * **y2** - the second y dimension coordinate (exclusive)
+		/// * **new_val** - value to store in the 2D array in the bounding box defined by
+		/// (x1, y1) -> (x2, y2)
 		pub fn bounded_fill(&mut self, x1: isize, y1: isize, x2: isize, y2: isize, new_val: T) {
 			for y in y1..y2{ for x in x1..x2{
 				self.bounded_set(x, y, new_val);
@@ -485,8 +521,8 @@ pub mod z2d {
 
 /// This module is used for storing 3-dimensional data arrays, and internally uses Z-index arrays
 /// to improve data localization and alignment to the CPU cache-line fetches. In other words, use
-/// this to improve performance for 2D data that is randomly accessed rather than raster scanned
-/// or if your data processing makes heavy use of neighbor look-up in both the X and Y directions.
+/// this to improve performance for 3D data that is randomly accessed rather than raster scanned
+/// or if your data processing makes heavy use of neighbor look-up in the X, Y, and Z directions.
 /// # How It Works
 /// When you initialize a zarray::z3d::ZArray3D struct, it creates an array of 8x8x8 data patches
 /// (512 total elements per patch), using Z-curve indexing within that patch. When you call a
@@ -611,6 +647,56 @@ pub mod z3d {
 			}
 			return ZArray3D { xsize, ysize, zsize, pxsize: px, pysize: py,
 				patches: p, _phantomdata: PhantomData};
+		}
+
+		/// Gets the (x, y, z) size of this 3D array
+		/// # Returns
+		/// Returns a tuple of (width, height, depth) for this 2D array
+		pub fn dimensions(&self) -> (usize, usize, usize){
+			return (self.xsize, self.ysize, self.zsize);
+		}
+
+		/// Gets the X-dimension size (aka width) of this 3D array
+		/// # Returns
+		/// Returns the size in the X dimension
+		pub fn xsize(&self) -> usize {
+			return self.xsize;
+		}
+
+
+		/// Alias for `xsize()`
+		/// # Returns
+		/// Returns the size in the X dimension
+		pub fn width(&self) -> usize {
+			return self.xsize();
+		}
+
+		/// Gets the Y-dimension size (aka height) of this 3D array
+		/// # Returns
+		/// Returns the size in the Y dimension
+		pub fn ysize(&self) -> usize {
+			return self.ysize;
+		}
+
+		/// Alias for `ysize()`
+		/// # Returns
+		/// Returns the size in the Y dimension
+		pub fn height(&self) -> usize {
+			return self.ysize();
+		}
+
+		/// Gets the Z-dimension size (aka depth) of this 3D array
+		/// # Returns
+		/// Returns the size in the Z dimension
+		pub fn zsize(&self) -> usize {
+			return self.zsize;
+		}
+
+		/// Alias for `zsize()`
+		/// # Returns
+		/// Returns the size in the Z dimension
+		pub fn depth(&self) -> usize {
+			return self.zsize();
 		}
 
 
@@ -778,8 +864,8 @@ pub mod z3d {
 			Ok(())
 		}
 
-		/// Fills a region of this 3D array with a given value, ignoring any
-		/// coordinates that go out of bounds.
+		/// Fills a region of this 3D array with a given value, wrapping the axese when
+		/// coordinates go out of bounds.
 		/// # Parameters
 		/// * **x1** - the first x dimension coordinate (inclusive)
 		/// * **y1** - the first y dimension coordinate (inclusive)
@@ -796,8 +882,8 @@ pub mod z3d {
 			} } }
 		}
 
-		/// Fills a region of this 3D array with a given value, wrapping the axese when
-		/// coordinates go out of bounds.
+		/// Fills a region of this 3D array with a given value, ignoring any
+		/// coordinates that go out of bounds.
 		/// # Parameters
 		/// * **x1** - the first x dimension coordinate (inclusive)
 		/// * **y1** - the first y dimension coordinate (inclusive)
@@ -888,6 +974,13 @@ mod tests {
 		let w: usize = 809;
 		let (mut ref_map, mut map) = seed_arrays_u8(w, h);
 		let mut prng = StdRng::seed_from_u64(20220331u64);
+		// assert get sizes
+		assert_eq!(map.dimensions().0, w);
+		assert_eq!(map.dimensions().1, h);
+		assert_eq!(map.xsize(), w);
+		assert_eq!(map.width(), w);
+		assert_eq!(map.ysize(), h);
+		assert_eq!(map.height(), h);
 		// set values
 		for y in 0..h {
 			for x in 0..w {
@@ -1141,6 +1234,16 @@ mod tests {
 		let d: usize = 23;
 		let (mut ref_map, mut map) = seed_3darrays_u8(w, h, d);
 		let mut prng = StdRng::seed_from_u64(20220331u64);
+		// assert get sizes
+		assert_eq!(map.dimensions().0, w);
+		assert_eq!(map.dimensions().1, h);
+		assert_eq!(map.dimensions().2, d);
+		assert_eq!(map.xsize(), w);
+		assert_eq!(map.width(), w);
+		assert_eq!(map.ysize(), h);
+		assert_eq!(map.height(), h);
+		assert_eq!(map.zsize(), d);
+		assert_eq!(map.depth(), d);
 		// set values
 		for z in 0..d {
 			for y in 0..h {
