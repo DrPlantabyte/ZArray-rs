@@ -183,8 +183,8 @@ pub mod z2d {
 	/// Private struct for holding an 8x8 data patch
 	#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
 	#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-	struct Patch<T>{
-		contents: [T;64]
+	struct Patch<T> {
+		contents: [T; 64]
 	}
 
 	impl<T> Patch<T> {
@@ -194,7 +194,7 @@ pub mod z2d {
 		/// * **y** - y coord (only lowest 3 bits are used, rest of bits are ignored)
 		/// # Returns
 		/// Returns a reference to the value stored in the patch at location (x & 0x07), (y & 0x07)
-		fn get(&self, x: usize, y:usize) -> &T {
+		fn get(&self, x: usize, y: usize) -> &T {
 			// 3-bit x 3-bit
 			return &self.contents[zorder_4bit_to_8bit(x as u8 & 0x07, y as u8 & 0x07) as usize];
 		}
@@ -203,7 +203,7 @@ pub mod z2d {
 		/// * **x** - x coord (only lowest 3 bits are used, rest of bits are ignored)
 		/// * **y** - y coord (only lowest 3 bits are used, rest of bits are ignored)
 		/// * **new_val** - value to set
-		fn set(&mut self, x: usize, y:usize, new_val: T) {
+		fn set(&mut self, x: usize, y: usize, new_val: T) {
 			// 3-bit x 3-bit
 			let i = zorder_4bit_to_8bit(x as u8 & 0x07, y as u8 & 0x07) as usize;
 			//let old_val = &self.contents[i];
@@ -213,7 +213,7 @@ pub mod z2d {
 	}
 
 	/// function for converting coordinate to index of data patch in the array of patches
-	fn patch_index(x: usize, y:usize, pwidth: usize) -> usize{
+	fn patch_index(x: usize, y: usize, pwidth: usize) -> usize {
 		return (x >> 3) + ((y >> 3) * (pwidth));
 	}
 
@@ -239,21 +239,21 @@ pub mod z2d {
 		/// Copy trait)
 		/// # Returns
 		/// Returns an initialized *ZArray2D* struct filled with *default_val*
-		pub fn new(width: usize, height: usize, default_val: T) -> ZArray2D<T>{
+		pub fn new(width: usize, height: usize, default_val: T) -> ZArray2D<T> {
 			let pwidth = (width >> 3) + 1;
 			let pheight = (height >> 3) + 1;
 			let patch_count = pwidth * pheight;
 			let mut p = Vec::with_capacity(patch_count);
-			for _ in 0..patch_count{
-				p.push(Patch{contents: [default_val; 64]});
+			for _ in 0..patch_count {
+				p.push(Patch { contents: [default_val; 64] });
 			}
-			return ZArray2D {width, height, pwidth, patches: p, _phantomdata: PhantomData};
+			return ZArray2D { width, height, pwidth, patches: p, _phantomdata: PhantomData };
 		}
 
 		/// Gets the (x, y) size of this 2D array
 		/// # Returns
 		/// Returns a tuple of (width, height) for this 2D array
-		pub fn dimensions(&self) -> (usize, usize){
+		pub fn dimensions(&self) -> (usize, usize) {
 			return (self.width, self.height);
 		}
 
@@ -297,11 +297,11 @@ pub mod z2d {
 		/// # Returns
 		/// Returns a Result type that holds either the returned data value (as a reference) from
 		/// the 2D array, or a *LookUpError* signalling that the coordinate is out of bounds
-		pub fn get(&self, x: usize, y: usize) -> Result<&T,LookUpError>{
+		pub fn get(&self, x: usize, y: usize) -> Result<&T, LookUpError> {
 			if x < self.width && y < self.height {
 				Ok(self.patches[patch_index(x, y, self.pwidth)].get(x, y))
 			} else {
-				Err(LookUpError{coord: vec![x, y], bounds: vec![self.width, self.height]})
+				Err(LookUpError { coord: vec![x, y], bounds: vec![self.width, self.height] })
 			}
 		}
 
@@ -316,11 +316,11 @@ pub mod z2d {
 		/// # Returns
 		/// Returns a Result type that is either empty or a *LookUpError* signalling that the
 		/// coordinate is out of bounds
-		pub fn set(&mut self, x: usize, y: usize, new_val: T) -> Result<(),LookUpError>{
+		pub fn set(&mut self, x: usize, y: usize, new_val: T) -> Result<(), LookUpError> {
 			if x < self.width && y < self.height {
 				Ok(self.patches[patch_index(x, y, self.pwidth)].set(x, y, new_val))
 			} else {
-				Err(LookUpError{coord: vec![x, y], bounds: vec![self.width, self.height]})
+				Err(LookUpError { coord: vec![x, y], bounds: vec![self.width, self.height] })
 			}
 		}
 
@@ -330,7 +330,7 @@ pub mod z2d {
 		/// * **y** - y dimension coordinate
 		/// # Returns
 		/// Returns a data value (as a reference) from the 2D array
-		pub fn get_unchecked(&self, x: usize, y: usize) -> &T{
+		pub fn get_unchecked(&self, x: usize, y: usize) -> &T {
 			return self.patches[patch_index(x, y, self.pwidth)].get(x, y);
 		}
 
@@ -339,7 +339,7 @@ pub mod z2d {
 		/// * **x** - x dimension coordinate
 		/// * **y** - y dimension coordinate
 		/// * **new_val** - value to store in the 2D array at (x, y)
-		pub fn set_unchecked(&mut self, x: usize, y: usize, new_val: T){
+		pub fn set_unchecked(&mut self, x: usize, y: usize, new_val: T) {
 			self.patches[patch_index(x, y, self.pwidth)].set(x, y, new_val);
 		}
 
@@ -352,7 +352,7 @@ pub mod z2d {
 		/// # Returns
 		/// Returns a reference to the data stored at the provided coordinate (wrapping both x
 		/// and y dimensions)
-		pub fn wrapped_get(&self, x: isize, y: isize) -> &T{
+		pub fn wrapped_get(&self, x: isize, y: isize) -> &T {
 			let x = (self.width as isize + (x % self.width as isize)) as usize % self.width;
 			let y = (self.height as isize + (y % self.height as isize)) as usize % self.height;
 			return &self.patches[patch_index(x, y, self.pwidth)].get(x, y);
@@ -380,7 +380,7 @@ pub mod z2d {
 		/// Returns an Option type that holds either the returned data value (as a reference) from
 		/// the 2D array, or *None* signalling that the coordinate is out of bounds (which can be
 		/// combined with .unwrap_or(default_value) to implement an out-of-bounds default)
-		pub fn bounded_get(&self, x: isize, y: isize) -> Option<&T>{
+		pub fn bounded_get(&self, x: isize, y: isize) -> Option<&T> {
 			if x >= 0 && y >= 0 && x < self.width as isize && y < self.height as isize {
 				return Some(&self.patches[patch_index(x as usize, y as usize, self.pwidth)]
 					.get(x as usize, y as usize));
@@ -421,9 +421,11 @@ pub mod z2d {
 		/// coordinate is out of bounds
 		pub fn fill(&mut self, x1: usize, y1: usize, x2: usize, y2: usize, new_val: T)
 					-> Result<(), LookUpError> {
-			for y in y1..y2{ for x in x1..x2{
-				self.set(x, y, new_val)?;
-			} }
+			for y in y1..y2 {
+				for x in x1..x2 {
+					self.set(x, y, new_val)?;
+				}
+			}
 			Ok(())
 		}
 
@@ -437,9 +439,11 @@ pub mod z2d {
 		/// * **new_val** - value to store in the 2D array in the bounding box defined by
 		/// (x1, y1) -> (x2, y2) with wrapped axese
 		pub fn wrapped_fill(&mut self, x1: isize, y1: isize, x2: isize, y2: isize, new_val: T) {
-			for y in y1..y2{ for x in x1..x2{
-				self.wrapped_set(x, y, new_val);
-			} }
+			for y in y1..y2 {
+				for x in x1..x2 {
+					self.wrapped_set(x, y, new_val);
+				}
+			}
 		}
 
 		/// Fills a region of this 2D array with a given value, ignoring any
@@ -452,11 +456,76 @@ pub mod z2d {
 		/// * **new_val** - value to store in the 2D array in the bounding box defined by
 		/// (x1, y1) -> (x2, y2)
 		pub fn bounded_fill(&mut self, x1: isize, y1: isize, x2: isize, y2: isize, new_val: T) {
-			for y in y1..y2{ for x in x1..x2{
-				self.bounded_set(x, y, new_val);
-			} }
+			for y in y1..y2 {
+				for x in x1..x2 {
+					self.bounded_set(x, y, new_val);
+				}
+			}
 		}
+	}
 
+	/// This struct is used by `ZArray2DIterator` to present values to the consumer of the
+	/// iterator
+	#[derive(Clone, PartialEq, Eq, Debug)]
+	pub struct ZArray2DIteratorItem <T> {
+		/// x-dimension coordinate
+		pub x: usize,
+		/// y-dimension coordinate
+		pub y: usize,
+		/// value at this coordinate
+		pub value: T
+	}
+
+	/// Iterator that iterates through the array
+	pub struct ZArray2DIterator<'a, T: Copy> {
+		/// array to iterate over
+		array: &'a ZArray2D<T>,
+		x_upper: usize,
+		y_upper: usize,
+		x_lower: usize,
+		y_lower: usize,
+		done: bool
+	}
+
+	impl<'a, T: Copy> ZArray2DIterator<'a, T> {
+		fn new(array: &'a ZArray2D<T>) -> ZArray2DIterator<'a, T> {
+			ZArray2DIterator{array, x_upper: 0, x_lower: 0, y_upper: 0, y_lower: 0, done: false}
+		}
+	}
+
+	impl<'a, T: Copy> Iterator for ZArray2DIterator<'a, T> {
+		type Item = ZArray2DIteratorItem<T>;
+
+		fn next(&mut self) -> Option<Self::Item> {
+			if self.done {return None};
+
+			let xsize = self.array.width;
+			let ysize = self.array.height;
+			let x = (self.x_upper << 3) | self.x_lower;
+			let y = (self.y_upper << 3) | self.y_lower;
+			let item = ZArray2DIteratorItem {
+				x, y, value: *self.array.get_unchecked(x, y)
+			};
+			if x >= xsize && y>= ysize{
+				self.done = true;
+			} else if self.x_lower < 8 && x < xsize {
+				self.x_lower += 1;
+			} else if self.y_lower < 8 && y < ysize {
+				self.y_lower += 1;
+				self.x_lower = 0;
+			}  else if x < xsize {
+				self.x_upper += 1;
+				self.x_lower = 0;
+				self.y_lower = 0;
+			} else {
+				self.y_upper += 1;
+				self.x_upper = 0;
+				self.x_lower = 0;
+				self.y_lower = 0;
+			}
+
+			Some(item)
+		}
 	}
 
 	/// Used for Z-index look-up
