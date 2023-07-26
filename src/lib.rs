@@ -240,8 +240,8 @@ pub mod z2d {
 		/// # Returns
 		/// Returns an initialized *ZArray2D* struct filled with *default_val*
 		pub fn new(width: usize, height: usize, default_val: T) -> ZArray2D<T> {
-			let pwidth = (width >> 3) + 1;
-			let pheight = (height >> 3) + 1;
+			let pwidth = ((width-1) >> 3) + 1;
+			let pheight = ((height-1) >> 3) + 1;
 			let patch_count = pwidth * pheight;
 			let mut p = Vec::with_capacity(patch_count);
 			for _ in 0..patch_count {
@@ -469,6 +469,21 @@ pub mod z2d {
 		pub fn iter(&self) -> ZArray2DIterator<T> {
 			ZArray2DIterator::new(self)
 		}
+
+	}
+
+	#[test]
+	fn check_patch_count_2d() {
+		let arr = ZArray2D::new(1, 1, 0u8);
+		assert_eq!(arr.patches.len(), 1, "Allocated wrong number of patches for array of size {}x{}", arr.width, arr.height);
+		let arr = ZArray2D::new(8, 8, 0u8);
+		assert_eq!(arr.patches.len(), 1, "Allocated wrong number of patches for array of size {}x{}", arr.width, arr.height);
+		let arr = ZArray2D::new(9, 8, 0u8);
+		assert_eq!(arr.patches.len(), 2, "Allocated wrong number of patches for array of size {}x{}", arr.width, arr.height);
+		let arr = ZArray2D::new(8, 9, 0u8);
+		assert_eq!(arr.patches.len(), 2, "Allocated wrong number of patches for array of size {}x{}", arr.width, arr.height);
+		let arr = ZArray2D::new(9, 9, 0u8);
+		assert_eq!(arr.patches.len(), 4, "Allocated wrong number of patches for array of size {}x{}", arr.width, arr.height);
 	}
 
 	/// This struct is used by `ZArray2DIterator` to present values to the consumer of the
@@ -499,7 +514,7 @@ pub mod z2d {
 
 	impl<'a, T: Copy> ZArray2DIterator<'a, T> {
 		fn new(array: &'a ZArray2D<T>) -> ZArray2DIterator<'a, T> {
-			if array.width == 0 && array.height == 0 {
+			if array.width == 0 || array.height == 0 {
 				ZArray2DIterator{array, patch: 0, index: 0, state: IterState::Done} // make a "done" iterator for empty arrays
 			} else {
 				ZArray2DIterator{array, patch: 0, index: 0, state: IterState::Start}
@@ -728,9 +743,9 @@ pub mod z3d {
 		/// # Returns
 		/// Returns an initialized *ZArray3D* struct filled with *default_val*
 		pub fn new(xsize: usize, ysize: usize, zsize: usize, default_val: T) -> ZArray3D<T>{
-			let px = (xsize >> 3) + 1;
-			let py = (ysize >> 3) + 1;
-			let pz = (zsize >> 3) + 1;
+			let px = ((xsize-1) >> 3) + 1;
+			let py = ((ysize-1) >> 3) + 1;
+			let pz = ((zsize-1) >> 3) + 1;
 			let patch_count = px * py * pz;
 			let mut p = Vec::with_capacity(patch_count);
 			for _ in 0..patch_count{
@@ -990,6 +1005,29 @@ pub mod z3d {
 				self.bounded_set(x, y, z, new_val);
 			} } }
 		}
+
+		/// Creates an iterator that iterates through the 3D array in Z-order
+		/// # Returns
+		/// A new ZArray3DIterator instance
+		pub fn iter(&self) -> ZArray3DIterator<T> {
+			ZArray3DIterator::new(self)
+		}
+	}
+
+	#[test]
+	fn check_patch_count_3d() {
+		let arr = ZArray3D::new(1, 1, 1, 0u8);
+		assert_eq!(arr.patches.len(), 1, "Allocated wrong number of patches for array of size {}x{}x{}", arr.xsize, arr.ysize, arr.zsize);
+		let arr = ZArray3D::new(8, 8, 8, 0u8);
+		assert_eq!(arr.patches.len(), 1, "Allocated wrong number of patches for array of size {}x{}x{}", arr.xsize, arr.ysize, arr.zsize);
+		let arr = ZArray3D::new(9, 8, 8, 0u8);
+		assert_eq!(arr.patches.len(), 2, "Allocated wrong number of patches for array of size {}x{}x{}", arr.xsize, arr.ysize, arr.zsize);
+		let arr = ZArray3D::new(8, 9, 8, 0u8);
+		assert_eq!(arr.patches.len(), 2, "Allocated wrong number of patches for array of size {}x{}x{}", arr.xsize, arr.ysize, arr.zsize);
+		let arr = ZArray3D::new(8, 8, 9, 0u8);
+		assert_eq!(arr.patches.len(), 2, "Allocated wrong number of patches for array of size {}x{}x{}", arr.xsize, arr.ysize, arr.zsize);
+		let arr = ZArray3D::new(9, 9, 9, 0u8);
+		assert_eq!(arr.patches.len(), 8, "Allocated wrong number of patches for array of size {}x{}x{}", arr.xsize, arr.ysize, arr.zsize);
 	}
 
 	/// Used for converting 3D coords to linear Z-index
@@ -1043,6 +1081,133 @@ pub mod z3d {
 			| zorder_4bit_to_12bit(x, y, z) as u32
 	}
 
+	/// Used by iterators to back-calculate the XYZ of an index, bit order is 0bzzzyyyxxx
+	static REVERSE_ZLUT: [u16; 512] = [
+		0, 1, 8, 9, 64, 65, 72, 73, 2, 3, 10, 11, 66, 67, 74, 75,
+		16, 17, 24, 25, 80, 81, 88, 89, 18, 19, 26, 27, 82, 83, 90, 91,
+		128, 129, 136, 137, 192, 193, 200, 201, 130, 131, 138, 139, 194, 195, 202, 203,
+		144, 145, 152, 153, 208, 209, 216, 217, 146, 147, 154, 155, 210, 211, 218, 219,
+		4, 5, 12, 13, 68, 69, 76, 77, 6, 7, 14, 15, 70, 71, 78, 79,
+		20, 21, 28, 29, 84, 85, 92, 93, 22, 23, 30, 31, 86, 87, 94, 95,
+		132, 133, 140, 141, 196, 197, 204, 205, 134, 135, 142, 143, 198, 199, 206, 207,
+		148, 149, 156, 157, 212, 213, 220, 221, 150, 151, 158, 159, 214, 215, 222, 223,
+		32, 33, 40, 41, 96, 97, 104, 105, 34, 35, 42, 43, 98, 99, 106, 107,
+		48, 49, 56, 57, 112, 113, 120, 121, 50, 51, 58, 59, 114, 115, 122, 123,
+		160, 161, 168, 169, 224, 225, 232, 233, 162, 163, 170, 171, 226, 227, 234, 235,
+		176, 177, 184, 185, 240, 241, 248, 249, 178, 179, 186, 187, 242, 243, 250, 251,
+		36, 37, 44, 45, 100, 101, 108, 109, 38, 39, 46, 47, 102, 103, 110, 111,
+		52, 53, 60, 61, 116, 117, 124, 125, 54, 55, 62, 63, 118, 119, 126, 127,
+		164, 165, 172, 173, 228, 229, 236, 237, 166, 167, 174, 175, 230, 231, 238, 239,
+		180, 181, 188, 189, 244, 245, 252, 253, 182, 183, 190, 191, 246, 247, 254, 255,
+		256, 257, 264, 265, 320, 321, 328, 329, 258, 259, 266, 267, 322, 323, 330, 331,
+		272, 273, 280, 281, 336, 337, 344, 345, 274, 275, 282, 283, 338, 339, 346, 347,
+		384, 385, 392, 393, 448, 449, 456, 457, 386, 387, 394, 395, 450, 451, 458, 459,
+		400, 401, 408, 409, 464, 465, 472, 473, 402, 403, 410, 411, 466, 467, 474, 475,
+		260, 261, 268, 269, 324, 325, 332, 333, 262, 263, 270, 271, 326, 327, 334, 335,
+		276, 277, 284, 285, 340, 341, 348, 349, 278, 279, 286, 287, 342, 343, 350, 351,
+		388, 389, 396, 397, 452, 453, 460, 461, 390, 391, 398, 399, 454, 455, 462, 463,
+		404, 405, 412, 413, 468, 469, 476, 477, 406, 407, 414, 415, 470, 471, 478, 479,
+		288, 289, 296, 297, 352, 353, 360, 361, 290, 291, 298, 299, 354, 355, 362, 363,
+		304, 305, 312, 313, 368, 369, 376, 377, 306, 307, 314, 315, 370, 371, 378, 379,
+		416, 417, 424, 425, 480, 481, 488, 489, 418, 419, 426, 427, 482, 483, 490, 491,
+		432, 433, 440, 441, 496, 497, 504, 505, 434, 435, 442, 443, 498, 499, 506, 507,
+		292, 293, 300, 301, 356, 357, 364, 365, 294, 295, 302, 303, 358, 359, 366, 367,
+		308, 309, 316, 317, 372, 373, 380, 381, 310, 311, 318, 319, 374, 375, 382, 383,
+		420, 421, 428, 429, 484, 485, 492, 493, 422, 423, 430, 431, 486, 487, 494, 495,
+		436, 437, 444, 445, 500, 501, 508, 509, 438, 439, 446, 447, 502, 503, 510, 511,
+	];
+
+
+	/// This struct is used by `ZArray2DIterator` to present values to the consumer of the
+	/// iterator
+	#[derive(Clone, PartialEq, Eq, Debug)]
+	pub struct ZArray3DIteratorItem <T> {
+		/// x-dimension coordinate
+		pub x: usize,
+		/// y-dimension coordinate
+		pub y: usize,
+		/// z-dimension coordinate
+		pub z: usize,
+		/// value at this coordinate
+		pub value: T
+	}
+
+	/// private state management enum
+	enum IterState {
+		Start, Processing, Done
+	}
+	/// Iterator that iterates through the array
+	pub struct ZArray3DIterator<'a, T: Copy> {
+		/// array to iterate over
+		array: &'a ZArray3D<T>,
+		patch: usize,
+		index: usize,
+		state: IterState
+	}
+
+	impl<'a, T: Copy> ZArray3DIterator<'a, T> {
+		fn new(array: &'a ZArray3D<T>) -> ZArray3DIterator<'a, T> {
+			if array.xsize == 0 || array.ysize == 0 || array.zsize == 0 {
+				ZArray3DIterator{array, patch: 0, index: 0, state: IterState::Done} // make a "done" iterator for empty arrays
+			} else {
+				ZArray3DIterator{array, patch: 0, index: 0, state: IterState::Start}
+			}
+		}
+	}
+
+	impl<'a, T: Copy> Iterator for ZArray3DIterator<'a, T> {
+		type Item = ZArray3DIteratorItem<T>;
+
+		fn next(&mut self) -> Option<Self::Item> {
+			match &self.state {
+				IterState::Done=> None,
+				IterState::Start=> {
+					self.state = IterState::Processing;
+					Some(ZArray3DIteratorItem{x: 0, y: 0, z: 0, value: self.array.patches[0].contents[0]})
+				},
+				IterState::Processing => {
+					let mut x ; let mut y ; let mut z ;
+					loop {
+						self.index += 1;
+						if self.index >= 512 {
+							self.index  = 0;
+							self.patch += 1;
+						}
+						let zyx_lower_pits = REVERSE_ZLUT[self.index];
+						x = ((self.patch % self.array.pxsize) << 3) |  (zyx_lower_pits & 0x07) as usize;
+						y = (((self.patch / self.array.pxsize) % self.array.pysize ) << 3) | ((zyx_lower_pits >> 3) & 0x07) as usize;
+						z = ( (self.patch / (self.array.pysize * self.array.pxsize)) << 3) | ((zyx_lower_pits >> 6) & 0x07) as usize;
+						if x < self.array.xsize && y < self.array.ysize && z < self.array.zsize {
+							break;
+						}
+						if self.patch >= self.array.patches.len() {
+							self.state = IterState::Done;
+							return None;
+						}
+					}
+					Some(ZArray3DIteratorItem{x, y, z, value: self.array.patches[self.patch].contents[self.index]})
+				}
+			}
+		}
+	}
+
+	#[test]
+	fn print_3d_zorder() {
+		let mut array = ZArray3D::new(8, 8, 8, 0usize);
+		for z in 0..8usize {
+			for y in 0..8usize {
+				for x in 0..8usize {
+					array.set_unchecked(x, y, z, (z << 6) | (y << 3) | x);
+				}
+			}
+		}
+		println!("[");
+		for i in 0..array.patches[0].contents.len() {
+			print!("{:?}, ", array.patches[0].contents[i]);
+			if i % 16 == 15{println!()}
+		}
+		println!("]");
+	}
 }
 
 
@@ -1612,11 +1777,40 @@ mod tests {
 	}
 	fn init_with_count_2d(w: usize, h: usize) -> ZArray2D<i32> {
 		let mut array = ZArray2D::new(w, h, 0i32);
-		//let mut i: i32 = 0;
+		let mut i: i32 = 0;
 		for y in 0..h {
 			for x in 0..w {
-				array.set_unchecked(x, y, x as i32 + ((y as i32) << 3));
-				//i += 1;
+				array.set_unchecked(x, y, i);
+				i += 1;
+			}
+		}
+		array
+	}
+	#[test]
+	fn iter_3d_test() {
+		test_3d_iter(8,8,8);
+		test_3d_iter(3,5,4);
+		test_3d_iter(11,5,3);
+		test_3d_iter(3,11,1);
+		test_3d_iter(57,101,89);
+		test_3d_iter(111,51,101);
+	}
+	fn test_3d_iter(w: usize, h: usize, l: usize) {
+		let a1 = init_with_count_3d(w, h, l);
+		let a2 = init_with_count_3d(w, h, l);
+		for item in a1.iter() {
+			assert_eq!(item.value, *a2.get(item.x, item.y, item.z).expect("Out of bounds"));
+		}
+	}
+	fn init_with_count_3d(w: usize, h: usize, l: usize) -> ZArray3D<i32> {
+		let mut array = ZArray3D::new(w, h, l, 0i32);
+		let mut i: i32 = 0;
+		for z in 0..l {
+			for y in 0..h {
+				for x in 0..w {
+					array.set_unchecked(x, y, z, i);
+					i += 1;
+				}
 			}
 		}
 		array
