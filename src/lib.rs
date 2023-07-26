@@ -462,6 +462,13 @@ pub mod z2d {
 				}
 			}
 		}
+
+		/// Creates an iterator that iterates through the 2D array in Z-order
+		/// # Returns
+		/// A new ZArray2DIterator instance
+		pub fn iter(&self) -> ZArray2DIterator<T> {
+			ZArray2DIterator::new(self)
+		}
 	}
 
 	/// This struct is used by `ZArray2DIterator` to present values to the consumer of the
@@ -476,20 +483,27 @@ pub mod z2d {
 		pub value: T
 	}
 
+
+	/// private state management enum
+	enum IterState {
+		Start, Processing, Done
+	}
 	/// Iterator that iterates through the array
 	pub struct ZArray2DIterator<'a, T: Copy> {
 		/// array to iterate over
 		array: &'a ZArray2D<T>,
-		x_upper: usize,
-		y_upper: usize,
-		x_lower: usize,
-		y_lower: usize,
-		done: bool
+		patch: usize,
+		index: usize,
+		state: IterState
 	}
 
 	impl<'a, T: Copy> ZArray2DIterator<'a, T> {
 		fn new(array: &'a ZArray2D<T>) -> ZArray2DIterator<'a, T> {
-			ZArray2DIterator{array, x_upper: 0, x_lower: 0, y_upper: 0, y_lower: 0, done: false}
+			if array.width == 0 && array.height == 0 {
+				ZArray2DIterator{array, patch: 0, index: 0, state: IterState::Done} // make a "done" iterator for empty arrays
+			} else {
+				ZArray2DIterator{array, patch: 0, index: 0, state: IterState::Start}
+			}
 		}
 	}
 
@@ -497,34 +511,34 @@ pub mod z2d {
 		type Item = ZArray2DIteratorItem<T>;
 
 		fn next(&mut self) -> Option<Self::Item> {
-			if self.done {return None};
-
-			let xsize = self.array.width;
-			let ysize = self.array.height;
-			let x = (self.x_upper << 3) | self.x_lower;
-			let y = (self.y_upper << 3) | self.y_lower;
-			let item = ZArray2DIteratorItem {
-				x, y, value: *self.array.get_unchecked(x, y)
-			};
-			if x >= xsize && y>= ysize{
-				self.done = true;
-			} else if self.x_lower < 8 && x < xsize {
-				self.x_lower += 1;
-			} else if self.y_lower < 8 && y < ysize {
-				self.y_lower += 1;
-				self.x_lower = 0;
-			}  else if x < xsize {
-				self.x_upper += 1;
-				self.x_lower = 0;
-				self.y_lower = 0;
-			} else {
-				self.y_upper += 1;
-				self.x_upper = 0;
-				self.x_lower = 0;
-				self.y_lower = 0;
+			match &self.state {
+				IterState::Done=> None,
+				IterState::Start=> {
+					self.state = IterState::Processing;
+					Some(ZArray2DIteratorItem{x: 0, y: 0, value: self.array.patches[0].contents[0]})
+				},
+				IterState::Processing => {
+					let mut x ; let mut y ;
+					loop {
+						self.index += 1;
+						if self.index >= 64 {
+							self.index  = 0;
+							self.patch += 1;
+						}
+						let yx_lower_pits = REVERSE_ZLUT[self.index];
+						x = ((self.patch % self.array.pwidth) << 3) | (yx_lower_pits & 0x07) as usize;
+						y = ((self.patch / self.array.pwidth) << 3) | ((yx_lower_pits >> 3) & 0x07) as usize;
+						if x < self.array.width && y < self.array.height{
+							break;
+						}
+						if self.patch >= self.array.patches.len() {
+							self.state = IterState::Done;
+							return None;
+						}
+					}
+					Some(ZArray2DIteratorItem{x, y, value: self.array.patches[self.patch].contents[self.index]})
+				}
 			}
-
-			Some(item)
 		}
 	}
 
@@ -546,6 +560,14 @@ pub mod z2d {
 		0b01010001,
 		0b01010100,
 		0b01010101
+	];
+
+	/// used by iterators for fast conversion from internal index to X, Y. Each number is 0byyyxxx
+	static REVERSE_ZLUT: [u8; 64] = [
+		0 ,  1,  8,  9,  2,  3, 10, 11, 16, 17, 24, 25, 18, 19, 26, 27,
+		4 ,  5, 12, 13,  6,  7, 14, 15, 20, 21, 28, 29, 22, 23, 30, 31,
+		32, 33, 40, 41, 34, 35, 42, 43, 48, 49, 56, 57, 50, 51, 58, 59,
+		36, 37, 44, 45, 38, 39, 46, 47, 52, 53, 60, 61, 54, 55, 62, 63
 	];
 
 	/// General purpose Z-index function to convert a two-dimensional coordinate into a localized
@@ -1570,5 +1592,33 @@ mod tests {
 				}
 			}}
 		}
+	}
+
+	#[test]
+	fn iter_2d_test() {
+		test_2d_iter(8,8);
+		test_2d_iter(3,5);
+		test_2d_iter(11,5);
+		test_2d_iter(3,11);
+		test_2d_iter(57,101);
+		test_2d_iter(111,51);
+	}
+	fn test_2d_iter(w: usize, h: usize) {
+		let a1 = init_with_count_2d(w, h);
+		let a2 = init_with_count_2d(w, h);
+		for item in a1.iter() {
+			assert_eq!(item.value, *a2.get(item.x, item.y).expect("Out of bounds"));
+		}
+	}
+	fn init_with_count_2d(w: usize, h: usize) -> ZArray2D<i32> {
+		let mut array = ZArray2D::new(w, h, 0i32);
+		//let mut i: i32 = 0;
+		for y in 0..h {
+			for x in 0..w {
+				array.set_unchecked(x, y, x as i32 + ((y as i32) << 3));
+				//i += 1;
+			}
+		}
+		array
 	}
 }
