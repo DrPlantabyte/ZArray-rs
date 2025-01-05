@@ -100,6 +100,20 @@ fn patch_index(x: usize, y: usize, pwidth: usize) -> usize {
 	return (x >> 3) + ((y >> 3) * (pwidth));
 }
 
+/// function for getting the coords represented by a patch
+fn patch_coords(pwidth: usize, pindex: usize) -> [(usize, usize); 64] {
+	let mut outbuffer = [(0usize, 0usize); 64];
+	let bx = (pindex % pwidth) << 3;
+	let by = (pindex / pwidth) << 3;
+	for i in 0..64 {
+		let bitmask = REVERSE_ZLUT[i];
+		let dx = bitmask & 0b00000111u8;
+		let dy = (bitmask >> 3u8) & 0b00000111u8;
+		outbuffer[i] = (bx + dx as usize, by + dy as usize);
+	}
+	return outbuffer;
+}
+
 /// This is primary struct for z-indexed 2D arrays. Create new instances with
 /// ZArray2D::new(x_size, y_size, initial_value)
 #[derive(Debug)]
@@ -148,14 +162,33 @@ impl<T> ZArray2D<T> where T: Default {
 	/// * **height** - size of this 2D array in the Y dimension
 	/// # Returns
 	/// Returns an initialized *ZArray2D* struct filled with default values
-	pub fn new(width: usize, height: usize) -> ZArray2D<T> {
+	pub fn new_with_default(width: usize, height: usize) -> ZArray2D<T> {
 		let pwidth = ((width-1) >> 3) + 1;
 		let pheight = ((height-1) >> 3) + 1;
 		let patch_count = pwidth * pheight;
 		let mut p = Vec::with_capacity(patch_count);
 		for _ in 0..patch_count {
-			let default_contents: [T; 64] = array_init(T::default);
+			let default_contents: [T; 64] = array_init(|_|T::default());
 			p.push(Patch { contents: default_contents });
+		}
+		return ZArray2D { width, height, pwidth, patches: p, _phantomdata: PhantomData };
+	}
+}
+impl<T> ZArray2D<T> where T: Copy {
+	 /// Create a Z-index 2D array of values, initially filled with the provided default value
+	/// # Parameters
+	/// * **width** - size of this 2D array in the X dimension
+	/// * **height** - size of this 2D array in the Y dimension
+	/// * **default_val** - initial fill value (it must implement the Copy trait)
+	/// # Returns
+	/// Returns an initialized *ZArray2D* struct filled with *default_val*
+	pub fn new(width: usize, height: usize, default_val: T) -> ZArray2D<T> {
+		let pwidth = ((width-1) >> 3) + 1;
+		let pheight = ((height-1) >> 3) + 1;
+		let patch_count = pwidth * pheight;
+		let mut p = Vec::with_capacity(patch_count);
+		for _ in 0..patch_count {
+			p.push(Patch { contents: [default_val; 64] });
 		}
 		return ZArray2D { width, height, pwidth, patches: p, _phantomdata: PhantomData };
 	}
@@ -168,13 +201,16 @@ impl<T> ZArray2D<T> {
 	/// * **constructor** - function which takes in the (X,Y) coords as a tuple and returns a value of type T
 	/// # Returns
 	/// Returns an initialized *ZArray2D* struct filled with *default_val*
-	pub fn create(width: usize, height: usize, constructor: Fn((usize, usize)) -> T) -> ZArray2D<T> {
+	pub fn new_with_constructor(width: usize, height: usize, constructor: Fn((usize, usize)) -> T) -> ZArray2D<T> {
 		let pwidth = ((width-1) >> 3) + 1;
 		let pheight = ((height-1) >> 3) + 1;
+		let init_width = pwidth << 3; // 
 		let patch_count = pwidth * pheight;
 		let mut p = Vec::with_capacity(patch_count);
-		for _ in 0..patch_count {
-			p.push(Patch { contents: [default_val; 64] });
+		for pindex in 0..patch_count {
+			let lookup_table = patch_coords(pwidth, pindex);
+			let initial_contents: [T; 64] = array_init(|i| constructor(lookup_table[i]));
+			p.push(Patch { contents: initial_contents });
 		}
 		return ZArray2D { width, height, pwidth, patches: p, _phantomdata: PhantomData };
 	}
@@ -487,7 +523,7 @@ impl<'a, T: Copy> Iterator for ZArray2DIterator<'a, T> {
 }
 
 /// Used for Z-index look-up
-static ZLUT: [u8; 16] = [
+const ZLUT: [u8; 16] = [
 	0b00000000,
 	0b00000001,
 	0b00000100,
@@ -507,7 +543,7 @@ static ZLUT: [u8; 16] = [
 ];
 
 /// used by iterators for fast conversion from internal index to X, Y. Each number is 0byyyxxx
-static REVERSE_ZLUT: [u8; 64] = [
+const REVERSE_ZLUT: [u8; 64] = [
 	0 ,  1,  8,  9,  2,  3, 10, 11, 16, 17, 24, 25, 18, 19, 26, 27,
 	4 ,  5, 12, 13,  6,  7, 14, 15, 20, 21, 28, 29, 22, 23, 30, 31,
 	32, 33, 40, 41, 34, 35, 42, 43, 48, 49, 56, 57, 50, 51, 58, 59,

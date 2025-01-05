@@ -110,6 +110,22 @@ fn patch_index(x: usize, y:usize, z:usize, pxsize: usize, pysize: usize) -> usiz
 	return (x >> 3) + pxsize * ((y >> 3) + (pysize * (z >> 3)));
 }
 
+/// function for getting the coords represented by a patch
+fn patch_coords(pxsize: usize, pysize: usize, pindex: usize) -> [(usize, usize, usize); 512] {
+	let mut outbuffer = [(0usize, 0usize, 0usize); 512];
+	let bx = (pindex % pxsize) << 3;
+	let by = ((pindex / pxsize) % pysize) << 3;
+	let bz = (pindex / (pxsize * pysize)) << 3;
+	for i in 0..512 {
+		let bitmask = REVERSE_ZLUT[i];
+		let dx = bitmask & 0b00000111u16;
+		let dy = (bitmask >> 3u16) & 0b00000111u16;
+		let dz = (bitmask >> 6u16) & 0b00000111u16;
+		outbuffer[i] = (bx + dx as usize, by + dy as usize, bz + dz as usize);
+	}
+	return outbuffer;
+}
+
 /// This is primary struct for z-indexed 3D arrays. Create new instances with
 /// ZArray3D::new(x_size, y_size, z_size, initial_value)
 #[derive(Debug)]
@@ -456,7 +472,7 @@ fn check_patch_count_3d() {
 }
 
 /// Used for converting 3D coords to linear Z-index
-static ZLUT: [u16; 16] = [
+const ZLUT: [u16; 16] = [
 	0b0000000000000000,
 	0b0000000000000001,
 	0b0000000000001000,
@@ -507,7 +523,7 @@ pub fn zorder_8bit_to_24bit(x:u8, y:u8, z: u8) -> u32 {
 }
 
 /// Used by iterators to back-calculate the XYZ of an index, bit order is 0bzzzyyyxxx
-static REVERSE_ZLUT: [u16; 512] = [
+const REVERSE_ZLUT: [u16; 512] = [
 	0, 1, 8, 9, 64, 65, 72, 73, 2, 3, 10, 11, 66, 67, 74, 75,
 	16, 17, 24, 25, 80, 81, 88, 89, 18, 19, 26, 27, 82, 83, 90, 91,
 	128, 129, 136, 137, 192, 193, 200, 201, 130, 131, 138, 139, 194, 195, 202, 203,
