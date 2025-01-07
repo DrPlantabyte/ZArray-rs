@@ -174,6 +174,7 @@ impl<T> ZArray2D<T> where T: Default {
 		return ZArray2D { width, height, pwidth, patches: p, _phantomdata: PhantomData };
 	}
 }
+
 impl<T> ZArray2D<T> where T: Copy {
 	 /// Create a Z-index 2D array of values, initially filled with the provided default value
 	/// # Parameters
@@ -193,6 +194,68 @@ impl<T> ZArray2D<T> where T: Copy {
 		return ZArray2D { width, height, pwidth, patches: p, _phantomdata: PhantomData };
 	}
 }
+
+impl<T> ZArray2D<T> where T: Clone {
+	/// Fills a region of this 2D array with a given value, or returns a *LookUpError* if the
+	/// provided coordinates go out of bounds. If you just want to ignore any
+	/// out-of-bounds coordinates, then you should use the *bounded_fill(x1, y1, x2, y2)*
+	/// method instead. If you want access to wrap-around (eg (-2, 0) equivalent to
+	/// (width-2,0)), then use the *wrapped_fill(x, y)* method.
+	/// # Parameters
+	/// * **x1** - the first x dimension coordinate (inclusive)
+	/// * **y1** - the first y dimension coordinate (inclusive)
+	/// * **x2** - the second x dimension coordinate (exclusive)
+	/// * **y2** - the second y dimension coordinate (exclusive)
+	/// * **new_val** - value to store in the 2D array in the bounding box defined by
+	/// (x1, y1) -> (x2, y2)
+	/// # Returns
+	/// Returns a Result type that is either empty or a *LookUpError* signalling that a
+	/// coordinate is out of bounds
+	pub fn fill(&mut self, x1: usize, y1: usize, x2: usize, y2: usize, new_val: T)
+				-> Result<(), LookUpError> {
+		for y in y1..y2 {
+			for x in x1..x2 {
+				self.set(x, y, new_val.clone())?;
+			}
+		}
+		Ok(())
+	}
+
+	/// Fills a region of this 2D array with a given value, wrapping the axese when
+	/// coordinates go out of bounds.
+	/// # Parameters
+	/// * **x1** - the first x dimension coordinate (inclusive)
+	/// * **y1** - the first y dimension coordinate (inclusive)
+	/// * **x2** - the second x dimension coordinate (exclusive)
+	/// * **y2** - the second y dimension coordinate (exclusive)
+	/// * **new_val** - value to store in the 2D array in the bounding box defined by
+	/// (x1, y1) -> (x2, y2) with wrapped axese
+	pub fn wrapped_fill(&mut self, x1: isize, y1: isize, x2: isize, y2: isize, new_val: T) {
+		for y in y1..y2 {
+			for x in x1..x2 {
+				self.wrapped_set(x, y, new_val.clone());
+			}
+		}
+	}
+
+	/// Fills a region of this 2D array with a given value, ignoring any
+	/// coordinates that go out of bounds.
+	/// # Parameters
+	/// * **x1** - the first x dimension coordinate (inclusive)
+	/// * **y1** - the first y dimension coordinate (inclusive)
+	/// * **x2** - the second x dimension coordinate (exclusive)
+	/// * **y2** - the second y dimension coordinate (exclusive)
+	/// * **new_val** - value to store in the 2D array in the bounding box defined by
+	/// (x1, y1) -> (x2, y2)
+	pub fn bounded_fill(&mut self, x1: isize, y1: isize, x2: isize, y2: isize, new_val: T) {
+		for y in y1..y2 {
+			for x in x1..x2 {
+				self.bounded_set(x, y, new_val.clone());
+			}
+		}
+	}
+}
+
 impl<T> ZArray2D<T> {
 	/// Create a Z-index 2D array of values, initially filled with the provided constructor function
 	/// # Parameters
@@ -201,10 +264,9 @@ impl<T> ZArray2D<T> {
 	/// * **constructor** - function which takes in the (X,Y) coords as a tuple and returns a value of type T
 	/// # Returns
 	/// Returns an initialized *ZArray2D* struct filled with *default_val*
-	pub fn new_with_constructor(width: usize, height: usize, constructor: Fn((usize, usize)) -> T) -> ZArray2D<T> {
+	pub fn new_with_constructor(width: usize, height: usize, constructor: impl Fn((usize, usize)) -> T) -> ZArray2D<T> {
 		let pwidth = ((width-1) >> 3) + 1;
 		let pheight = ((height-1) >> 3) + 1;
-		let init_width = pwidth << 3; // 
 		let patch_count = pwidth * pheight;
 		let mut p = Vec::with_capacity(patch_count);
 		for pindex in 0..patch_count {
@@ -369,65 +431,6 @@ impl<T> ZArray2D<T> {
 		}
 	}
 
-	/// Fills a region of this 2D array with a given value, or returns a *LookUpError* if the
-	/// provided coordinates go out of bounds. If you just want to ignore any
-	/// out-of-bounds coordinates, then you should use the *bounded_fill(x1, y1, x2, y2)*
-	/// method instead. If you want access to wrap-around (eg (-2, 0) equivalent to
-	/// (width-2,0)), then use the *wrapped_fill(x, y)* method.
-	/// # Parameters
-	/// * **x1** - the first x dimension coordinate (inclusive)
-	/// * **y1** - the first y dimension coordinate (inclusive)
-	/// * **x2** - the second x dimension coordinate (exclusive)
-	/// * **y2** - the second y dimension coordinate (exclusive)
-	/// * **new_val** - value to store in the 2D array in the bounding box defined by
-	/// (x1, y1) -> (x2, y2)
-	/// # Returns
-	/// Returns a Result type that is either empty or a *LookUpError* signalling that a
-	/// coordinate is out of bounds
-	pub fn fill(&mut self, x1: usize, y1: usize, x2: usize, y2: usize, new_val: T)
-				-> Result<(), LookUpError> {
-		for y in y1..y2 {
-			for x in x1..x2 {
-				self.set(x, y, new_val)?;
-			}
-		}
-		Ok(())
-	}
-
-	/// Fills a region of this 2D array with a given value, wrapping the axese when
-	/// coordinates go out of bounds.
-	/// # Parameters
-	/// * **x1** - the first x dimension coordinate (inclusive)
-	/// * **y1** - the first y dimension coordinate (inclusive)
-	/// * **x2** - the second x dimension coordinate (exclusive)
-	/// * **y2** - the second y dimension coordinate (exclusive)
-	/// * **new_val** - value to store in the 2D array in the bounding box defined by
-	/// (x1, y1) -> (x2, y2) with wrapped axese
-	pub fn wrapped_fill(&mut self, x1: isize, y1: isize, x2: isize, y2: isize, new_val: T) {
-		for y in y1..y2 {
-			for x in x1..x2 {
-				self.wrapped_set(x, y, new_val);
-			}
-		}
-	}
-
-	/// Fills a region of this 2D array with a given value, ignoring any
-	/// coordinates that go out of bounds.
-	/// # Parameters
-	/// * **x1** - the first x dimension coordinate (inclusive)
-	/// * **y1** - the first y dimension coordinate (inclusive)
-	/// * **x2** - the second x dimension coordinate (exclusive)
-	/// * **y2** - the second y dimension coordinate (exclusive)
-	/// * **new_val** - value to store in the 2D array in the bounding box defined by
-	/// (x1, y1) -> (x2, y2)
-	pub fn bounded_fill(&mut self, x1: isize, y1: isize, x2: isize, y2: isize, new_val: T) {
-		for y in y1..y2 {
-			for x in x1..x2 {
-				self.bounded_set(x, y, new_val);
-			}
-		}
-	}
-
 	/// Creates an iterator that iterates through the 2D array in Z-order
 	/// # Returns
 	/// A new ZArray2DIterator instance
@@ -436,6 +439,7 @@ impl<T> ZArray2D<T> {
 	}
 
 }
+
 
 #[test]
 fn check_patch_count_2d() {
@@ -469,7 +473,7 @@ enum IterState {
 	Start, Processing, Done
 }
 /// Iterator that iterates through the array
-pub struct ZArray2DIterator<'a, T: Copy> {
+pub struct ZArray2DIterator<'a, T> {
 	/// array to iterate over
 	array: &'a ZArray2D<T>,
 	patch: usize,
@@ -477,7 +481,7 @@ pub struct ZArray2DIterator<'a, T: Copy> {
 	state: IterState
 }
 
-impl<'a, T: Copy> ZArray2DIterator<'a, T> {
+impl<'a, T> ZArray2DIterator<'a, T> {
 	fn new(array: &'a ZArray2D<T>) -> ZArray2DIterator<'a, T> {
 		if array.width == 0 || array.height == 0 {
 			ZArray2DIterator{array, patch: 0, index: 0, state: IterState::Done} // make a "done" iterator for empty arrays
@@ -487,7 +491,7 @@ impl<'a, T: Copy> ZArray2DIterator<'a, T> {
 	}
 }
 
-impl<'a, T: Copy> Iterator for ZArray2DIterator<'a, T> {
+impl<'a, T> Iterator for ZArray2DIterator<'a, T> {
 	type Item = ZArray2DIteratorItem<T>;
 
 	fn next(&mut self) -> Option<Self::Item> {

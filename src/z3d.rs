@@ -47,6 +47,7 @@
 
 use std::hash::{Hash, Hasher};
 use std::marker::PhantomData;
+use array_init::array_init;
 use crate::LookUpError;
 
 
@@ -173,6 +174,28 @@ impl<T> Hash for ZArray3D<T> where T: Hash{
 	}
 }
 
+impl<T> ZArray3D<T> where T: Default {
+	/// Create a Z-index 3D array of values, initially filled with the default values
+	/// # Parameters
+	/// * **xsize** - size of this 3D array in the X dimension
+	/// * **ysize** - size of this 3D array in the Y dimension
+	/// * **zsize** - size of this 3D array in the Z dimension
+	/// # Returns
+	/// Returns an initialized *ZArray2D* struct filled with default values
+	pub fn new_with_default(xsize: usize, ysize: usize, zsize: usize) -> ZArray3D<T> {
+		let px = ((xsize-1) >> 3) + 1;
+		let py = ((ysize-1) >> 3) + 1;
+		let pz = ((zsize-1) >> 3) + 1;
+		let patch_count = px * py * pz;
+		let mut p = Vec::with_capacity(patch_count);
+		for _ in 0..patch_count {
+			let default_contents: [T; 512] = array_init(|_|T::default());
+			p.push(Patch { contents: default_contents });
+		}
+		return ZArray3D { xsize, ysize, zsize, pxsize: px, pysize: py,
+			patches: p, _phantomdata: PhantomData};
+	}
+}
 impl<T> ZArray3D<T> where T: Copy {
 	/// Create a Z-index 3D array of values, initially filled with the provided default value
 	/// # Parameters
@@ -191,6 +214,30 @@ impl<T> ZArray3D<T> where T: Copy {
 		let mut p = Vec::with_capacity(patch_count);
 		for _ in 0..patch_count{
 			p.push(Patch{contents: [default_val; 512]});
+		}
+		return ZArray3D { xsize, ysize, zsize, pxsize: px, pysize: py,
+			patches: p, _phantomdata: PhantomData};
+	}
+}
+impl<T> ZArray3D<T> {
+	/// Create a Z-index 3D array of values, initially filled with the provided constructor function
+	/// # Parameters
+	/// * **xsize** - size of this 3D array in the X dimension
+	/// * **ysize** - size of this 3D array in the Y dimension
+	/// * **zsize** - size of this 3D array in the Z dimension
+	/// * **constructor** - function which takes in the (X,Y,Z) coords as a tuple and returns a value of type T
+	/// # Returns
+	/// Returns an initialized *ZArray2D* struct filled with *default_val*
+	pub fn new_with_constructor(xsize: usize, ysize: usize, zsize: usize, constructor: impl Fn((usize, usize, usize)) -> T) -> ZArray3D<T> {
+		let px = ((xsize-1) >> 3) + 1;
+		let py = ((ysize-1) >> 3) + 1;
+		let pz = ((zsize-1) >> 3) + 1;
+		let patch_count = px * py * pz;
+		let mut p = Vec::with_capacity(patch_count);
+		for pindex in 0..patch_count {
+			let lookup_table = patch_coords(px, py, pindex);
+			let initial_contents: [T; 512] = array_init(|i| constructor(lookup_table[i]));
+			p.push(Patch { contents: initial_contents });
 		}
 		return ZArray3D { xsize, ysize, zsize, pxsize: px, pysize: py,
 			patches: p, _phantomdata: PhantomData};
@@ -578,7 +625,7 @@ enum IterState {
 	Start, Processing, Done
 }
 /// Iterator that iterates through the array
-pub struct ZArray3DIterator<'a, T: Copy> {
+pub struct ZArray3DIterator<'a, T> {
 	/// array to iterate over
 	array: &'a ZArray3D<T>,
 	patch: usize,
@@ -586,7 +633,7 @@ pub struct ZArray3DIterator<'a, T: Copy> {
 	state: IterState
 }
 
-impl<'a, T: Copy> ZArray3DIterator<'a, T> {
+impl<'a, T> ZArray3DIterator<'a, T> {
 	fn new(array: &'a ZArray3D<T>) -> ZArray3DIterator<'a, T> {
 		if array.xsize == 0 || array.ysize == 0 || array.zsize == 0 {
 			ZArray3DIterator{array, patch: 0, index: 0, state: IterState::Done} // make a "done" iterator for empty arrays
@@ -596,7 +643,7 @@ impl<'a, T: Copy> ZArray3DIterator<'a, T> {
 	}
 }
 
-impl<'a, T: Copy> Iterator for ZArray3DIterator<'a, T> {
+impl<'a, T> Iterator for ZArray3DIterator<'a, T> {
 	type Item = ZArray3DIteratorItem<T>;
 
 	fn next(&mut self) -> Option<Self::Item> {
