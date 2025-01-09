@@ -43,7 +43,7 @@ Most of the time, using a `Vec<Vec<T>>` would have great performance, so long as
 Two reasons: Firstly, Z-Order indexing only works on square/cube shaped data, so a pure Z-Order index would waste huge amount of memory for 2D and 3D arrays that are long and/or thin. Second, on most CPU architectures (Intel, AMD, and Arm), memory is accessed in 64-byte cache-lines, thus the performance gains from Z-order indexing are less significant above 6 bits of linear addressing space (ie 8x8 or 4x4x4).
 
 ## Note
-As of version 1.3.0, any type can be used with the *zarray* crate (eariler versions only allowed data types with the *Copy* trait). However, you will not see a performance improvement over a simple `Vec<Vec<T>>` if `T` is not a sized type or contains pointers (`Box`, `Arc`, etc) or other heap-allocated data. Even so, you may find value in *zarray*'s utility functions such as `wrapped_get/set(...)` and `bounded_get/set(...)` which allow for hassle-free out-of-bounds handling when pplying raster operations to the array.
+As of version 1.3.0, any type can be used with the *zarray* crate (eariler versions only allowed data types with the *Copy* trait). However, you will not see a performance improvement over a simple `Vec<Vec<T>>` if `T` is not a sized type or contains pointers (`Box`, `Arc`, etc) or other heap-allocated data. Even so, you may find value in *zarray*'s utility functions such as `wrapped_get/set(...)` and `bounded_get/set(...)` which allow for hassle-free out-of-bounds handling when applying raster operations to the array.
 
 ## License
 This library is provided under the MIT license. In other words: free to use as you wish.

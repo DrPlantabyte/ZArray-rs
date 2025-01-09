@@ -43,7 +43,7 @@
 //!   }}
 //! }
 //! ```
-// Z-order indexing in 2 dimensions
+// Z-order indexing in 3 dimensions
 
 use core::hash::{Hash, Hasher};
 use core::borrow::Borrow;
