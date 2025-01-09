@@ -1,6 +1,6 @@
 [package]
 name = "zarray"
-version = "1.3.0"
+version = "1.3.1"
 edition = "2021"
 authors = ["Christopher Collin Hall"]
 description = """Cache-optimized 2D and 3D arrays using Morton order (aka
