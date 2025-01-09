@@ -45,8 +45,9 @@
 //! ```
 // Z-order indexing in 2 dimensions
 
-use std::hash::{Hash, Hasher};
-use std::marker::PhantomData;
+use core::hash::{Hash, Hasher};
+use core::borrow::Borrow;
+use core::marker::PhantomData;
 use array_init::array_init;
 use crate::LookUpError;
 
@@ -196,6 +197,7 @@ impl<T> ZArray3D<T> where T: Default {
 			patches: p, _phantomdata: PhantomData};
 	}
 }
+
 impl<T> ZArray3D<T> where T: Copy {
 	/// Create a Z-index 3D array of values, initially filled with the provided default value
 	/// # Parameters
@@ -219,6 +221,71 @@ impl<T> ZArray3D<T> where T: Copy {
 			patches: p, _phantomdata: PhantomData};
 	}
 }
+
+impl<T> ZArray3D<T> where T: Clone {
+	
+	/// Fills a region of this 3D array with a given value, or returns a *LookUpError* if the
+	/// provided coordinates go out of bounds. If you just want to ignore any
+	/// out-of-bounds coordinates, then you should use the
+	/// *bounded_fill(x1, y1, z1, x2, y2, z2)*
+	/// method instead. If you want access to wrap-around (eg (-2, 0, 1) equivalent to
+	/// (width-2, 0, 1)), then use the *wrapped_fill(x, y, z)* method.
+	/// # Parameters
+	/// * **x1** - the first x dimension coordinate (inclusive)
+	/// * **y1** - the first y dimension coordinate (inclusive)
+	/// * **z1** - the first z dimension coordinate (inclusive)
+	/// * **x2** - the second x dimension coordinate (exclusive)
+	/// * **y2** - the second y dimension coordinate (exclusive)
+	/// * **z2** - the second z dimension coordinate (exclusive)
+	/// * **new_val** - value to store in the 2D array in the bounding box defined by
+	/// (x1, y1, z1) -> (x2, y2, z2)
+	/// # Returns
+	/// Returns a Result type that is either empty or a *LookUpError* signalling that a
+	/// coordinate is out of bounds
+	pub fn fill(&mut self, x1: usize, y1: usize, z1: usize, x2: usize, y2: usize, z2: usize, new_val: impl Borrow<T>) -> Result<(), LookUpError> {
+		for y in y1..y2{ for x in x1..x2{ for z in z1..z2{
+			self.set(x, y, z, new_val.borrow().clone())?;
+		} } }
+		Ok(())
+	}
+
+		/// Fills a region of this 3D array with a given value, wrapping the axese when
+		/// coordinates go out of bounds.
+		/// # Parameters
+		/// * **x1** - the first x dimension coordinate (inclusive)
+		/// * **y1** - the first y dimension coordinate (inclusive)
+		/// * **z1** - the first z dimension coordinate (inclusive)
+		/// * **x2** - the second x dimension coordinate (exclusive)
+		/// * **y2** - the second y dimension coordinate (exclusive)
+		/// * **z2** - the second z dimension coordinate (exclusive)
+		/// * **new_val** - value to store in the 3D array in the bounding box defined by
+		/// (x1, y1, z1) -> (x2, y2, z2)
+		pub fn wrapped_fill(&mut self, x1: isize, y1: isize, z1: isize,
+						x2: isize, y2: isize, z2: isize, new_val: impl Borrow<T>) {
+		for y in y1..y2{ for x in x1..x2{ for z in z1..z2{
+			self.wrapped_set(x, y, z, new_val.borrow().clone());
+		} } }
+	}
+
+		/// Fills a region of this 3D array with a given value, ignoring any
+		/// coordinates that go out of bounds.
+		/// # Parameters
+		/// * **x1** - the first x dimension coordinate (inclusive)
+		/// * **y1** - the first y dimension coordinate (inclusive)
+		/// * **z1** - the first z dimension coordinate (inclusive)
+		/// * **x2** - the second x dimension coordinate (exclusive)
+		/// * **y2** - the second y dimension coordinate (exclusive)
+		/// * **z2** - the second z dimension coordinate (exclusive)
+		/// * **new_val** - value to store in the 3D array in the bounding box defined by
+		/// (x1, y1, z1) -> (x2, y2, z2)
+		pub fn bounded_fill(&mut self, x1: isize, y1: isize, z1: isize,
+						x2: isize, y2: isize, z2: isize, new_val: impl Borrow<T>) {
+		for y in y1..y2{ for x in x1..x2{ for z in z1..z2{
+			self.bounded_set(x, y, z, new_val.borrow().clone());
+		} } }
+	}
+}
+
 impl<T> ZArray3D<T> {
 	/// Create a Z-index 3D array of values, initially filled with the provided constructor function
 	/// # Parameters
@@ -431,75 +498,29 @@ impl<T> ZArray3D<T> {
 		}
 	}
 
-	/// Fills a region of this 3D array with a given value, or returns a *LookUpError* if the
-	/// provided coordinates go out of bounds. If you just want to ignore any
-	/// out-of-bounds coordinates, then you should use the
-	/// *bounded_fill(x1, y1, z1, x2, y2, z2)*
-	/// method instead. If you want access to wrap-around (eg (-2, 0, 1) equivalent to
-	/// (width-2, 0, 1)), then use the *wrapped_fill(x, y, z)* method.
-	/// # Parameters
-	/// * **x1** - the first x dimension coordinate (inclusive)
-	/// * **y1** - the first y dimension coordinate (inclusive)
-	/// * **z1** - the first z dimension coordinate (inclusive)
-	/// * **x2** - the second x dimension coordinate (exclusive)
-	/// * **y2** - the second y dimension coordinate (exclusive)
-	/// * **z2** - the second z dimension coordinate (exclusive)
-	/// * **new_val** - value to store in the 2D array in the bounding box defined by
-	/// (x1, y1, z1) -> (x2, y2, z2)
-	/// # Returns
-	/// Returns a Result type that is either empty or a *LookUpError* signalling that a
-	/// coordinate is out of bounds
-	pub fn fill(&mut self, x1: usize, y1: usize, z1: usize, x2: usize, y2: usize, z2: usize,
-				new_val: T)
-				-> Result<(), LookUpError> {
-		for y in y1..y2{ for x in x1..x2{ for z in z1..z2{
-			self.set(x, y, z, new_val)?;
-		} } }
-		Ok(())
-	}
-
-	/// Fills a region of this 3D array with a given value, wrapping the axese when
-	/// coordinates go out of bounds.
-	/// # Parameters
-	/// * **x1** - the first x dimension coordinate (inclusive)
-	/// * **y1** - the first y dimension coordinate (inclusive)
-	/// * **z1** - the first z dimension coordinate (inclusive)
-	/// * **x2** - the second x dimension coordinate (exclusive)
-	/// * **y2** - the second y dimension coordinate (exclusive)
-	/// * **z2** - the second z dimension coordinate (exclusive)
-	/// * **new_val** - value to store in the 3D array in the bounding box defined by
-	/// (x1, y1, z1) -> (x2, y2, z2)
-	pub fn wrapped_fill(&mut self, x1: isize, y1: isize, z1: isize,
-						x2: isize, y2: isize, z2: isize, new_val: T) {
-		for y in y1..y2{ for x in x1..x2{ for z in z1..z2{
-			self.wrapped_set(x, y, z, new_val);
-		} } }
-	}
-
-	/// Fills a region of this 3D array with a given value, ignoring any
-	/// coordinates that go out of bounds.
-	/// # Parameters
-	/// * **x1** - the first x dimension coordinate (inclusive)
-	/// * **y1** - the first y dimension coordinate (inclusive)
-	/// * **z1** - the first z dimension coordinate (inclusive)
-	/// * **x2** - the second x dimension coordinate (exclusive)
-	/// * **y2** - the second y dimension coordinate (exclusive)
-	/// * **z2** - the second z dimension coordinate (exclusive)
-	/// * **new_val** - value to store in the 3D array in the bounding box defined by
-	/// (x1, y1, z1) -> (x2, y2, z2)
-	pub fn bounded_fill(&mut self, x1: isize, y1: isize, z1: isize,
-						x2: isize, y2: isize, z2: isize, new_val: T) {
-		for y in y1..y2{ for x in x1..x2{ for z in z1..z2{
-			self.bounded_set(x, y, z, new_val);
-		} } }
-	}
-
 	/// Creates an iterator that iterates through the 3D array in Z-order
 	/// # Returns
 	/// A new ZArray3DIterator instance
 	pub fn iter(&self) -> ZArray3DIterator<T> {
 		ZArray3DIterator::new(self)
 	}
+	
+	/// Applies a function to the Z-array to mutate it in-place
+	/// # Parameters
+	/// * **transform_fn** - Function that takes the coordsinate as a tuple and a
+	/// reference to the old value and returns the new value
+	pub fn transform(&mut self, transform_fn: impl Fn((usize, usize, usize), &T) -> T) {
+		for pindex in 0..self.patches.len() {
+			let patch_coords = patch_coords(self.pxsize, self.pysize, pindex);
+			for coord in patch_coords {
+				if coord.0 < self.xsize && coord.1 < self.ysize && coord.2 < self.zsize {
+					let old_val = self.get_unchecked(coord.0, coord.1, coord.2);
+					self.set_unchecked(coord.0, coord.1, coord.2, transform_fn(coord, old_val));
+				}
+			}
+		}
+	}
+
 }
 
 #[test]
@@ -608,16 +629,16 @@ const REVERSE_ZLUT: [u16; 512] = [
 
 /// This struct is used by `ZArray2DIterator` to present values to the consumer of the
 /// iterator
-#[derive(Clone, PartialEq, Eq, Debug)]
-pub struct ZArray3DIteratorItem <T> {
+#[derive(Debug)]
+pub struct ZArray3DIteratorItem<'a, T> {
 	/// x-dimension coordinate
 	pub x: usize,
 	/// y-dimension coordinate
 	pub y: usize,
 	/// z-dimension coordinate
 	pub z: usize,
-	/// value at this coordinate
-	pub value: T
+	/// reference to value at this coordinate
+	pub value: &'a T
 }
 
 /// private state management enum
@@ -644,14 +665,14 @@ impl<'a, T> ZArray3DIterator<'a, T> {
 }
 
 impl<'a, T> Iterator for ZArray3DIterator<'a, T> {
-	type Item = ZArray3DIteratorItem<T>;
+	type Item = ZArray3DIteratorItem<'a, T>;
 
 	fn next(&mut self) -> Option<Self::Item> {
 		match &self.state {
 			IterState::Done=> None,
 			IterState::Start=> {
 				self.state = IterState::Processing;
-				Some(ZArray3DIteratorItem{x: 0, y: 0, z: 0, value: self.array.patches[0].contents[0]})
+				Some(ZArray3DIteratorItem{x: 0, y: 0, z: 0, value: &self.array.patches[0].contents[0]})
 			},
 			IterState::Processing => {
 				let mut x ; let mut y ; let mut z ;
@@ -673,7 +694,7 @@ impl<'a, T> Iterator for ZArray3DIterator<'a, T> {
 						return None;
 					}
 				}
-				Some(ZArray3DIteratorItem{x, y, z, value: self.array.patches[self.patch].contents[self.index]})
+				Some(ZArray3DIteratorItem{x, y, z, value: &self.array.patches[self.patch].contents[self.index]})
 			}
 		}
 	}

@@ -205,7 +205,7 @@ fn test_zarray2dmap_performance_neighborsum(){
 #[test]
 fn test_zarray2dmap_performance_pathfinding(){
 	use std::time::Instant;
-	use pathfinding::prelude::{absdiff, astar};
+	use pathfinding::prelude::astar;
 	let h: usize = 300;
 	let w: usize = 300;
 	let (mut ref_map, mut map) = seed_arrays_u8(w, h);
@@ -230,7 +230,7 @@ fn test_zarray2dmap_performance_pathfinding(){
 				].into_iter().map(|p:(i32, i32)| (p,
 					if p.0 >= 0 && p.1 >= 0 && p.0 < w as i32 && p.1 < h as i32 {
 						ref_map[p.1 as usize][p.0 as usize] as i32} else {oob as i32})),
-		|&(x, y)| absdiff(x, goal.0) + absdiff(y, goal.1),
+		|&(x, y)| (x - goal.0).abs() + (y - goal.1).abs(),
 		|&p| p == goal
 	);
 	let (ref_path, ref_cost) = result.unwrap();
@@ -248,7 +248,7 @@ fn test_zarray2dmap_performance_pathfinding(){
 			(x+1,y), (x-1,y), (x,y+1), (x,y-1)
 		].into_iter().map(|p:(i32, i32)| (p, *map.bounded_get(p.0 as isize, p.1 as isize )
 			.unwrap_or(&oob) as i32)),
-		|&(x, y)| absdiff(x, goal.0) + absdiff(y, goal.1),
+		|&(x, y)| (x - goal.0).abs() + (y - goal.1).abs(),
 		|&p| p == goal
 	);
 	let (my_path, my_cost) = result.unwrap();
@@ -558,7 +558,7 @@ fn test_2d_iter(w: usize, h: usize) {
 	let a1 = init_with_count_2d(w, h);
 	let a2 = init_with_count_2d(w, h);
 	for item in a1.iter() {
-		assert_eq!(item.value, *a2.get(item.x, item.y).expect("Out of bounds"));
+		assert_eq!(item.value, a2.get(item.x, item.y).expect("Out of bounds"));
 	}
 }
 fn init_with_count_2d(w: usize, h: usize) -> ZArray2D<i32> {
@@ -585,7 +585,7 @@ fn test_3d_iter(w: usize, h: usize, l: usize) {
 	let a1 = init_with_count_3d(w, h, l);
 	let a2 = init_with_count_3d(w, h, l);
 	for item in a1.iter() {
-		assert_eq!(item.value, *a2.get(item.x, item.y, item.z).expect("Out of bounds"));
+		assert_eq!(item.value, a2.get(item.x, item.y, item.z).expect("Out of bounds"));
 	}
 }
 fn init_with_count_3d(w: usize, h: usize, l: usize) -> ZArray3D<i32> {
@@ -600,4 +600,48 @@ fn init_with_count_3d(w: usize, h: usize, l: usize) -> ZArray3D<i32> {
 		}
 	}
 	array
+}
+
+#[test]
+fn test_constructor_function_2d(){
+	let xsize = 13;
+	let ysize = 11;
+	let z2d = ZArray2D::new_with_constructor(xsize, ysize,  |(x, y)| x as i32 + y as i32 * 1000);
+	for item in z2d.iter() {
+		assert!(item.x < xsize);
+		assert!(item.y < ysize);
+		assert_eq!(*item.value, item.x as i32 + item.y as i32 * 1000);
+	}
+}
+
+#[test]
+fn test_constructor_function_3d(){
+	let xsize = 13;
+	let ysize = 11;
+	let zsize = 9;
+	let z3d = ZArray3D::new_with_constructor(xsize, ysize, zsize,  |(x, y, z)| x as i32 + y as i32 * 1000 + z as i32 * 1000000);
+	for item in z3d.iter() {
+		assert!(item.x < xsize);
+		assert!(item.y < ysize);
+		assert!(item.z < zsize);
+		assert_eq!(*item.value, item.x as i32 + item.y as i32 * 1000 + item.z as i32 * 1000000);
+	}
+}
+
+#[test]
+fn test_apply_2d(){
+	let mut z2d: ZArray2D<i32> = ZArray2D::new_with_default(17, 31);
+	z2d.transform(|(x, y), v| *v + x as i32 + y as i32 * 1000);
+	for item in z2d.iter() {
+		assert_eq!(*item.value, item.x as i32 + item.y as i32 * 1000);
+	}
+}
+
+#[test]
+fn test_apply_3d(){
+	let mut z3d: ZArray3D<i32> = ZArray3D::new_with_default(17, 31, 9);
+	z3d.transform(|(x, y, z), v| *v + x as i32 + y as i32 * 1000 + z as i32 * 1000000);
+	for item in z3d.iter() {
+		assert_eq!(*item.value, item.x as i32 + item.y as i32 * 1000 + item.z as i32 * 1000000);
+	}
 }

@@ -37,8 +37,9 @@
 //! ```
 // Z-order indexing in 2 dimensions
 
-use std::hash::{Hash, Hasher};
-use std::marker::PhantomData;
+use core::hash::{Hash, Hasher};
+use core::borrow::Borrow;
+use core::marker::PhantomData;
 use array_init::array_init;
 use crate::LookUpError;
 
@@ -211,11 +212,11 @@ impl<T> ZArray2D<T> where T: Clone {
 	/// # Returns
 	/// Returns a Result type that is either empty or a *LookUpError* signalling that a
 	/// coordinate is out of bounds
-	pub fn fill(&mut self, x1: usize, y1: usize, x2: usize, y2: usize, new_val: T)
+	pub fn fill(&mut self, x1: usize, y1: usize, x2: usize, y2: usize, new_val: impl Borrow<T>)
 				-> Result<(), LookUpError> {
 		for y in y1..y2 {
 			for x in x1..x2 {
-				self.set(x, y, new_val.clone())?;
+				self.set(x, y, new_val.borrow().clone())?;
 			}
 		}
 		Ok(())
@@ -230,10 +231,10 @@ impl<T> ZArray2D<T> where T: Clone {
 	/// * **y2** - the second y dimension coordinate (exclusive)
 	/// * **new_val** - value to store in the 2D array in the bounding box defined by
 	/// (x1, y1) -> (x2, y2) with wrapped axese
-	pub fn wrapped_fill(&mut self, x1: isize, y1: isize, x2: isize, y2: isize, new_val: T) {
+	pub fn wrapped_fill(&mut self, x1: isize, y1: isize, x2: isize, y2: isize, new_val: impl Borrow<T>) {
 		for y in y1..y2 {
 			for x in x1..x2 {
-				self.wrapped_set(x, y, new_val.clone());
+				self.wrapped_set(x, y, new_val.borrow().clone());
 			}
 		}
 	}
@@ -247,10 +248,10 @@ impl<T> ZArray2D<T> where T: Clone {
 	/// * **y2** - the second y dimension coordinate (exclusive)
 	/// * **new_val** - value to store in the 2D array in the bounding box defined by
 	/// (x1, y1) -> (x2, y2)
-	pub fn bounded_fill(&mut self, x1: isize, y1: isize, x2: isize, y2: isize, new_val: T) {
+	pub fn bounded_fill(&mut self, x1: isize, y1: isize, x2: isize, y2: isize, new_val: impl Borrow<T>) {
 		for y in y1..y2 {
 			for x in x1..x2 {
-				self.bounded_set(x, y, new_val.clone());
+				self.bounded_set(x, y, new_val.borrow().clone());
 			}
 		}
 	}
@@ -438,6 +439,22 @@ impl<T> ZArray2D<T> {
 		ZArray2DIterator::new(self)
 	}
 
+	/// Applies a function to the Z-array to mutate it in-place
+	/// # Parameters
+	/// * **transform_fn** - Function that takes the coordsinate as a tuple and a
+	/// reference to the old value and returns the new value
+	pub fn transform(&mut self, transform_fn: impl Fn((usize, usize), &T) -> T) {
+		for pindex in 0..self.patches.len() {
+			let patch_coords = patch_coords(self.pwidth, pindex);
+			for coord in patch_coords {
+				if coord.0 < self.width && coord.1 < self.height {
+					let old_val = self.get_unchecked(coord.0, coord.1);
+					self.set_unchecked(coord.0, coord.1, transform_fn(coord, old_val));
+				}
+			}
+		}
+	}
+
 }
 
 
@@ -457,16 +474,15 @@ fn check_patch_count_2d() {
 
 /// This struct is used by `ZArray2DIterator` to present values to the consumer of the
 /// iterator
-#[derive(Clone, PartialEq, Eq, Debug)]
-pub struct ZArray2DIteratorItem <T> {
+#[derive(Debug)]
+pub struct ZArray2DIteratorItem<'a, T> {
 	/// x-dimension coordinate
 	pub x: usize,
 	/// y-dimension coordinate
 	pub y: usize,
-	/// value at this coordinate
-	pub value: T
+	/// reference to value at this coordinate
+	pub value: &'a T
 }
-
 
 /// private state management enum
 enum IterState {
@@ -492,14 +508,14 @@ impl<'a, T> ZArray2DIterator<'a, T> {
 }
 
 impl<'a, T> Iterator for ZArray2DIterator<'a, T> {
-	type Item = ZArray2DIteratorItem<T>;
+	type Item = ZArray2DIteratorItem<'a, T>;
 
 	fn next(&mut self) -> Option<Self::Item> {
 		match &self.state {
 			IterState::Done=> None,
 			IterState::Start=> {
 				self.state = IterState::Processing;
-				Some(ZArray2DIteratorItem{x: 0, y: 0, value: self.array.patches[0].contents[0]})
+				Some(ZArray2DIteratorItem{x: 0, y: 0, value: &self.array.patches[0].contents[0]})
 			},
 			IterState::Processing => {
 				let mut x ; let mut y ;
@@ -520,7 +536,7 @@ impl<'a, T> Iterator for ZArray2DIterator<'a, T> {
 						return None;
 					}
 				}
-				Some(ZArray2DIteratorItem{x, y, value: self.array.patches[self.patch].contents[self.index]})
+				Some(ZArray2DIteratorItem{x, y, value: &self.array.patches[self.patch].contents[self.index]})
 			}
 		}
 	}
