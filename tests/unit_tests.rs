@@ -606,7 +606,11 @@ fn init_with_count_3d(w: usize, h: usize, l: usize) -> ZArray3D<i32> {
 fn test_constructor_function_2d(){
 	let xsize = 13;
 	let ysize = 11;
-	let z2d = ZArray2D::new_with_constructor(xsize, ysize,  |(x, y)| x as i32 + y as i32 * 1000);
+    let z2d = ZArray2D::new_with_constructor(xsize, ysize,  |(x, y)| {
+	assert!(x < xsize, "out of bounds: {x}");
+	assert!(y < ysize, "out of bounds: {y}");
+        x as i32 + y as i32 * 1000
+    });
 	for item in z2d.iter() {
 		assert!(item.x < xsize);
 		assert!(item.y < ysize);
@@ -619,7 +623,12 @@ fn test_constructor_function_3d(){
 	let xsize = 13;
 	let ysize = 11;
 	let zsize = 9;
-	let z3d = ZArray3D::new_with_constructor(xsize, ysize, zsize,  |(x, y, z)| x as i32 + y as i32 * 1000 + z as i32 * 1000000);
+    let z3d = ZArray3D::new_with_constructor(xsize, ysize, zsize,  |(x, y, z)| {
+	assert!(x < xsize, "out of bounds: {x}");
+	assert!(y < ysize, "out of bounds: {y}");
+	assert!(z < ysize, "out of bounds: {z}");
+        x as i32 + y as i32 * 1000 + z as i32 * 1000000
+    });
 	for item in z3d.iter() {
 		assert!(item.x < xsize);
 		assert!(item.y < ysize);
@@ -630,8 +639,14 @@ fn test_constructor_function_3d(){
 
 #[test]
 fn test_apply_2d(){
-	let mut z2d: ZArray2D<i32> = ZArray2D::new_with_default(17, 31);
-	z2d.transform(|(x, y), v| *v + x as i32 + y as i32 * 1000);
+	let xsize = 17;
+	let ysize = 31;
+	let mut z2d: ZArray2D<i32> = ZArray2D::new_with_default(xsize, ysize);
+    z2d.transform(|(x, y), v| {
+	assert!(x < xsize, "out of bounds: {x}");
+	assert!(y < ysize, "out of bounds: {y}");
+        *v + x as i32 + y as i32 * 1000
+    });
 	for item in z2d.iter() {
 		assert_eq!(*item.value, item.x as i32 + item.y as i32 * 1000);
 	}
@@ -639,8 +654,16 @@ fn test_apply_2d(){
 
 #[test]
 fn test_apply_3d(){
-	let mut z3d: ZArray3D<i32> = ZArray3D::new_with_default(17, 31, 9);
-	z3d.transform(|(x, y, z), v| *v + x as i32 + y as i32 * 1000 + z as i32 * 1000000);
+	let xsize = 17;
+	let ysize = 31;
+	let zsize = 9;
+	let mut z3d: ZArray3D<i32> = ZArray3D::new_with_default(xsize, ysize, zsize);
+    z3d.transform(|(x, y, z), v| {
+	assert!(x < xsize, "out of bounds: {x}");
+	assert!(y < ysize, "out of bounds: {y}");
+	assert!(z < ysize, "out of bounds: {z}");
+        *v + x as i32 + y as i32 * 1000 + z as i32 * 1000000
+    });
 	for item in z3d.iter() {
 		assert_eq!(*item.value, item.x as i32 + item.y as i32 * 1000 + item.z as i32 * 1000000);
 	}
