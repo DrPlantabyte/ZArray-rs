@@ -44,32 +44,11 @@ use array_init::array_init;
 use crate::LookUpError;
 
 /// Private struct for holding an 8x8 data patch
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 struct Patch<T> {
 	contents: [T; 64]
 }
-
-impl<T> Copy for Patch<T> where T: Copy{}
-impl<T> Clone for Patch<T> where T: Clone{
-	fn clone(&self) -> Self {
-			Self{contents: self.contents.clone()}
-	}
-}
-impl<T> PartialEq for Patch<T> where T: PartialEq{
-	fn eq(&self, other: &Self) -> bool {
-			self.contents.eq(&other.contents)
-	}
-}
-impl<T> Eq for Patch<T> where T: Eq{}
-impl<T> Hash for Patch<T> where T: Hash{
-	fn hash<H: Hasher>(&self, state: &mut H) {
-		for item in &self.contents {
-			item.hash(state);
-		}
-	}
-}
-
 
 impl<T> Patch<T> {
 	/// data patch getter
@@ -117,7 +96,7 @@ fn patch_coords(pwidth: usize, pindex: usize) -> [(usize, usize); 64] {
 
 /// This is primary struct for z-indexed 2D arrays. Create new instances with
 /// ZArray2D::new(x_size, y_size, initial_value)
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct ZArray2D<T> {
 	// for heap allocated data
@@ -128,26 +107,6 @@ pub struct ZArray2D<T> {
 	_phantomdata: PhantomData<T>,
 }
 
-impl<T> Clone for ZArray2D<T> where T: Clone{
-	fn clone(&self) -> Self {
-			Self{
-				width: self.width,
-				height: self.height,
-				pwidth: self.pwidth,
-				patches: self.patches.clone(),
-				_phantomdata: self._phantomdata
-			}
-	}
-}
-impl<T> PartialEq for ZArray2D<T> where T: PartialEq{
-	fn eq(&self, other: &Self) -> bool {
-		self.width == other.width
-		&& self.height == other.height
-		&& self.pwidth == other.pwidth
-		&& self.patches == other.patches
-	}
-}
-impl<T> Eq for ZArray2D<T> where T: Eq{}
 impl<T> Hash for ZArray2D<T> where T: Hash{
 	fn hash<H: Hasher>(&self, state: &mut H) {
 		for patch in &self.patches {
