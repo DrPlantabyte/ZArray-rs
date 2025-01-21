@@ -40,6 +40,7 @@
 use core::hash::{Hash, Hasher};
 use core::borrow::Borrow;
 use core::marker::PhantomData;
+use std::collections::binary_heap::Iter;
 use array_init::array_init;
 use crate::LookUpError;
 
@@ -455,6 +456,19 @@ impl<T> ZArray2D<T> {
 		}
 	}
 
+	/// Returns a vector of all valid (x, y) coordinates in this 2D array in Z-order
+	pub fn coords(&self) -> Vec<(usize, usize)> {
+		let mut out: Vec<(usize, usize)> = Vec::with_capacity(self.width * self.height);
+		for pindex in 0..self.patches.len() {
+			let patch_coords = patch_coords(self.pwidth, pindex);
+			for coord in patch_coords {
+				if coord.0 < self.width && coord.1 < self.height {
+					out.push(coord);
+				}
+			}
+		}
+		return out;
+	}
 }
 
 
