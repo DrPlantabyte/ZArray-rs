@@ -40,7 +40,6 @@
 use core::hash::{Hash, Hasher};
 use core::borrow::Borrow;
 use core::marker::PhantomData;
-use std::collections::binary_heap::Iter;
 use array_init::array_init;
 use crate::LookUpError;
 
