@@ -258,7 +258,10 @@ impl<T> ZArray2D<T> where T: Clone {
 }
 
 impl<T> ZArray2D<T> {
-	/// Create a Z-index 2D array of values, initially filled with the provided constructor function
+	/// Create a Z-index 2D array of values, initially filled with the provided constructor function.
+	/// Note that the constructor function may be called for coordinates that are outside the
+	/// requested dimensions in order to initialize memory in 8x8 blocks. To avoid this, use only
+	/// dimensions that are multiples of 8.
 	/// # Parameters
 	/// * **width** - size of this 2D array in the X dimension
 	/// * **height** - size of this 2D array in the Y dimension
@@ -455,6 +458,19 @@ impl<T> ZArray2D<T> {
 		}
 	}
 
+	/// Returns a vector of all valid (x, y) coordinates in this 2D array in Z-order
+	pub fn coords(&self) -> Vec<(usize, usize)> {
+		let mut out: Vec<(usize, usize)> = Vec::with_capacity(self.width * self.height);
+		for pindex in 0..self.patches.len() {
+			let patch_coords = patch_coords(self.pwidth, pindex);
+			for coord in patch_coords {
+				if coord.0 < self.width && coord.1 < self.height {
+					out.push(coord);
+				}
+			}
+		}
+		return out;
+	}
 }
 
 

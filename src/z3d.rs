@@ -287,7 +287,10 @@ impl<T> ZArray3D<T> where T: Clone {
 }
 
 impl<T> ZArray3D<T> {
-	/// Create a Z-index 3D array of values, initially filled with the provided constructor function
+	/// Create a Z-index 3D array of values, initially filled with the provided constructor function.
+	/// Note that the constructor function may be called for coordinates that are outside the
+	/// requested dimensions in order to initialize memory in 8x8x8 blocks. To avoid this, use only
+	/// dimensions that are multiples of 8.
 	/// # Parameters
 	/// * **xsize** - size of this 3D array in the X dimension
 	/// * **ysize** - size of this 3D array in the Y dimension
@@ -521,6 +524,19 @@ impl<T> ZArray3D<T> {
 		}
 	}
 
+	/// Returns a vector of all valid (x, y, z) coordinates in this 3D array in Z-order
+	pub fn coords(&self) -> Vec<(usize, usize, usize)> {
+		let mut out: Vec<(usize, usize, usize)> = Vec::with_capacity(self.xsize * self.ysize * self.zsize);
+		for pindex in 0..self.patches.len() {
+			let patch_coords = patch_coords(self.pxsize, self.pysize, pindex);
+			for coord in patch_coords {
+				if coord.0 < self.xsize && coord.1 < self.ysize && coord.2 < self.zsize {
+					out.push(coord);
+				}
+			}
+		}
+		return out;
+	}
 }
 
 #[test]
