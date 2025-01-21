@@ -521,6 +521,19 @@ impl<T> ZArray3D<T> {
 		}
 	}
 
+	/// Returns a vector of all valid (x, y, z) coordinates in this 3D array in Z-order
+	pub fn coords(&self) -> Vec<(usize, usize, usize)> {
+		let mut out: Vec<(usize, usize, usize)> = Vec::with_capacity(self.xsize * self.ysize * self.zsize);
+		for pindex in 0..self.patches.len() {
+			let patch_coords = patch_coords(self.pxsize, self.pysize, pindex);
+			for coord in patch_coords {
+				if coord.0 < self.xsize && coord.1 < self.ysize && coord.2 < self.zsize {
+					out.push(coord);
+				}
+			}
+		}
+		return out;
+	}
 }
 
 #[test]
