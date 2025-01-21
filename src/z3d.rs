@@ -287,7 +287,10 @@ impl<T> ZArray3D<T> where T: Clone {
 }
 
 impl<T> ZArray3D<T> {
-	/// Create a Z-index 3D array of values, initially filled with the provided constructor function
+	/// Create a Z-index 3D array of values, initially filled with the provided constructor function.
+	/// Note that the constructor function may be called for coordinates that are outside the
+	/// requested dimensions in order to initialize memory in 8x8x8 blocks. To avoid this, use only
+	/// dimensions that are multiples of 8.
 	/// # Parameters
 	/// * **xsize** - size of this 3D array in the X dimension
 	/// * **ysize** - size of this 3D array in the Y dimension

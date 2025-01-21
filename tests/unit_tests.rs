@@ -607,8 +607,6 @@ fn test_constructor_function_2d(){
 	let xsize = 13;
 	let ysize = 11;
     let z2d = ZArray2D::new_with_constructor(xsize, ysize,  |(x, y)| {
-	assert!(x < xsize, "out of bounds: {x}");
-	assert!(y < ysize, "out of bounds: {y}");
         x as i32 + y as i32 * 1000
     });
 	for item in z2d.iter() {
@@ -624,9 +622,6 @@ fn test_constructor_function_3d(){
 	let ysize = 11;
 	let zsize = 9;
     let z3d = ZArray3D::new_with_constructor(xsize, ysize, zsize,  |(x, y, z)| {
-	assert!(x < xsize, "out of bounds: {x}");
-	assert!(y < ysize, "out of bounds: {y}");
-	assert!(z < ysize, "out of bounds: {z}");
         x as i32 + y as i32 * 1000 + z as i32 * 1000000
     });
 	for item in z3d.iter() {

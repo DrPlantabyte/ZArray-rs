@@ -259,7 +259,10 @@ impl<T> ZArray2D<T> where T: Clone {
 }
 
 impl<T> ZArray2D<T> {
-	/// Create a Z-index 2D array of values, initially filled with the provided constructor function
+	/// Create a Z-index 2D array of values, initially filled with the provided constructor function.
+	/// Note that the constructor function may be called for coordinates that are outside the
+	/// requested dimensions in order to initialize memory in 8x8 blocks. To avoid this, use only
+	/// dimensions that are multiples of 8.
 	/// # Parameters
 	/// * **width** - size of this 2D array in the X dimension
 	/// * **height** - size of this 2D array in the Y dimension
