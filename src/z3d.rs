@@ -53,30 +53,10 @@ use crate::LookUpError;
 
 
 /// Private struct for holding an 8x8x8 data patch
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 struct Patch<T>{
 	contents: [T;512]
-}
-
-impl<T> Copy for Patch<T> where T: Copy{}
-impl<T> Clone for Patch<T> where T: Clone{
-	fn clone(&self) -> Self {
-			Self{contents: self.contents.clone()}
-	}
-}
-impl<T> PartialEq for Patch<T> where T: PartialEq{
-	fn eq(&self, other: &Self) -> bool {
-			self.contents.eq(&other.contents)
-	}
-}
-impl<T> Eq for Patch<T> where T: Eq{}
-impl<T> Hash for Patch<T> where T: Hash{
-	fn hash<H: Hasher>(&self, state: &mut H) {
-		for item in &self.contents {
-			item.hash(state);
-		}
-	}
 }
 
 impl<T> Patch<T> {
@@ -130,7 +110,7 @@ fn patch_coords(pxsize: usize, pysize: usize, pindex: usize) -> [(usize, usize, 
 
 /// This is primary struct for z-indexed 3D arrays. Create new instances with
 /// ZArray3D::new(x_size, y_size, z_size, initial_value)
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct ZArray3D<T> {
 	// for heap allocated data
@@ -143,30 +123,6 @@ pub struct ZArray3D<T> {
 	_phantomdata: PhantomData<T>,
 }
 
-impl<T> Clone for ZArray3D<T> where T: Clone{
-	fn clone(&self) -> Self {
-			Self{
-				xsize: self.xsize,
-				ysize: self.ysize,
-				zsize: self.zsize,
-				pxsize: self.pxsize,
-				pysize: self.pysize,
-				patches: self.patches.clone(),
-				_phantomdata: self._phantomdata
-			}
-	}
-}
-impl<T> PartialEq for ZArray3D<T> where T: PartialEq{
-	fn eq(&self, other: &Self) -> bool {
-		self.xsize == other.xsize
-		&& self.ysize == other.ysize
-		&& self.zsize == other.zsize
-		&& self.pxsize == other.pxsize
-		&& self.pysize == other.pysize
-		&& self.patches == other.patches
-	}
-}
-impl<T> Eq for ZArray3D<T> where T: Eq{}
 impl<T> Hash for ZArray3D<T> where T: Hash{
 	fn hash<H: Hasher>(&self, state: &mut H) {
 		for patch in &self.patches {
